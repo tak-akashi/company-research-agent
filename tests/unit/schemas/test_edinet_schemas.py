@@ -145,6 +145,16 @@ class TestDocumentMetadata:
         assert doc.fund_code == "F00001"
         assert doc.parent_doc_id == "S100PARENT"
 
+    def test_nullable_fields_accept_none(self, sample_document_data: dict[str, object]) -> None:
+        """Nullable fields should accept None values."""
+        sample_document_data["filerName"] = None
+        sample_document_data["submitDateTime"] = None
+        sample_document_data["docDescription"] = None
+        doc = DocumentMetadata.model_validate(sample_document_data)
+        assert doc.filer_name is None
+        assert doc.submit_date_time is None
+        assert doc.doc_description is None
+
 
 class TestDocumentListResponse:
     """Tests for DocumentListResponse schema."""

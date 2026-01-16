@@ -88,15 +88,19 @@ class DocumentMetadata(BaseModel):
     edinet_code: str | None = Field(None, alias="edinetCode", description="EDINET code")
     sec_code: str | None = Field(None, alias="secCode", description="Securities code")
     jcn: str | None = Field(None, alias="JCN", description="Corporate number")
-    filer_name: str = Field(..., alias="filerName", description="Filer name")
+    filer_name: str | None = Field(None, alias="filerName", description="Filer name")
     fund_code: str | None = Field(None, alias="fundCode", description="Fund code")
     ordinance_code: str | None = Field(None, alias="ordinanceCode", description="Ordinance code")
     form_code: str | None = Field(None, alias="formCode", description="Form code")
     doc_type_code: str | None = Field(None, alias="docTypeCode", description="Document type code")
     period_start: str | None = Field(None, alias="periodStart", description="Period start date")
     period_end: str | None = Field(None, alias="periodEnd", description="Period end date")
-    submit_date_time: str = Field(..., alias="submitDateTime", description="Submission datetime")
-    doc_description: str = Field(..., alias="docDescription", description="Document description")
+    submit_date_time: str | None = Field(
+        None, alias="submitDateTime", description="Submission datetime"
+    )
+    doc_description: str | None = Field(
+        None, alias="docDescription", description="Document description"
+    )
     issuer_edinet_code: str | None = Field(
         None, alias="issuerEdinetCode", description="Issuer EDINET code"
     )

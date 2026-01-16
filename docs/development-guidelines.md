@@ -1167,6 +1167,23 @@ CACHE_DIR=./data/cache
 
 ## CI/CD パイプライン
 
+### pre-commit（ローカル）
+
+コミット時に自動で ruff, ruff-format, mypy が実行されます。
+
+```bash
+# Git hooks のインストール（初回のみ）
+uv run pre-commit install
+
+# 手動で全ファイルに対して実行
+uv run pre-commit run --all-files
+```
+
+**.pre-commit-config.yaml** で定義されるフック:
+- `ruff`: Lint（自動修正付き）
+- `ruff-format`: フォーマット
+- `mypy`: 型チェック
+
 ### GitHub Actions設定
 
 ```yaml
@@ -1181,59 +1198,61 @@ on:
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.x"
+      - name: Set up Python
+        run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --dev
-      - name: Run ruff
+      - name: Run ruff check
         run: uv run ruff check src/
       - name: Run ruff format check
         run: uv run ruff format --check src/
 
   type-check:
+    name: Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.x"
+      - name: Set up Python
+        run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --dev
       - name: Run mypy
         run: uv run mypy src/
 
   test:
+    name: Test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg15
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.x"
+      - name: Set up Python
+        run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --dev
-      - name: Run tests
-        run: uv run pytest --cov=src --cov-report=xml
-        env:
-          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_db
-      - name: Upload coverage
+      - name: Run pytest
+        run: uv run pytest --cov=src/ --cov-report=xml
+      - name: Upload coverage reports
         uses: codecov/codecov-action@v4
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 ```
 
 ### 品質ゲート

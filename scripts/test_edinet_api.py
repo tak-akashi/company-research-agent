@@ -41,6 +41,7 @@ from company_research_agent.core.exceptions import (
     EDINETAuthenticationError,
     EDINETNotFoundError,
 )
+from company_research_agent.schemas.edinet_schemas import DocumentMetadata
 
 
 async def main(target_date: date, download: bool = False, limit: int = 5) -> None:
@@ -56,7 +57,7 @@ async def main(target_date: date, download: bool = False, limit: int = 5) -> Non
     print()
 
     try:
-        config = EDINETConfig()
+        config = EDINETConfig()  # type: ignore[call-arg]
         print(f"✓ 設定読み込み完了 (API Key: {config.api_key[:8]}...)")
     except Exception as e:
         print(f"✗ 設定読み込み失敗: {e}")
@@ -97,7 +98,7 @@ async def main(target_date: date, download: bool = False, limit: int = 5) -> Non
         # 3. 書類種別ごとの集計
         print("\n--- 3. 書類種別ごとの集計 ---")
         doc_types: dict[str, int] = {}
-        securities_reports: list[object] = []
+        securities_reports: list[DocumentMetadata] = []
 
         for doc in response.results or []:
             doc_type = doc.doc_type_code or "不明"
@@ -128,7 +129,7 @@ async def main(target_date: date, download: bool = False, limit: int = 5) -> Non
             print(f"\n--- 4. 有価証券報告書一覧（{len(securities_reports)}件） ---")
             display_count = len(securities_reports) if limit == 0 else limit
             for doc in securities_reports[:display_count]:
-                print(f"  [{doc.doc_id}] {doc.filer_name}")
+                print(f"  [{doc.doc_id}] {doc.filer_name or 'N/A'}")
                 print(f"    証券コード: {doc.sec_code or 'なし'}")
                 print(f"    期間: {doc.period_start} ~ {doc.period_end}")
                 print(
@@ -150,14 +151,14 @@ async def main(target_date: date, download: bool = False, limit: int = 5) -> Non
             doc = securities_reports[0]
             if doc.pdf_flag:
                 save_path = download_dir / f"{doc.doc_id}.pdf"
-                print(f"  ダウンロード中: {doc.filer_name}")
+                print(f"  ダウンロード中: {doc.filer_name or 'N/A'}")
                 try:
                     await client.download_document(doc.doc_id, 2, save_path)
                     print(f"  ✓ 保存完了: {save_path}")
                 except EDINETAPIError as e:
                     print(f"  ✗ ダウンロード失敗: {e}")
             else:
-                print(f"  スキップ: {doc.filer_name} (PDFなし)")
+                print(f"  スキップ: {doc.filer_name or 'N/A'} (PDFなし)")
 
     print("\n=== 動作確認完了 ===")
 

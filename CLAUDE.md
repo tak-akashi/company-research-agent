@@ -20,7 +20,7 @@ AI-powered Corporate Research Agent - 企業情報収集・分析エージェン
 | データベース | PostgreSQL 15+ + pgvector |
 | XBRL解析 | edinet-xbrl + BeautifulSoup/lxml |
 | PDF解析 | pdfplumber + pymupdf4llm + yomitoku |
-| 開発ツール | ruff, mypy, pytest |
+| 開発ツール | ruff, mypy, pytest, pre-commit |
 
 ## ディレクトリ構造
 
@@ -53,6 +53,9 @@ docker/            # Docker設定
 # 依存関係インストール
 uv sync --dev
 
+# pre-commit フックのインストール（初回のみ）
+uv run pre-commit install
+
 # テスト実行
 uv run pytest
 
@@ -62,6 +65,9 @@ uv run mypy src/
 # Lint & フォーマット
 uv run ruff check src/
 uv run ruff format src/
+
+# pre-commit 手動実行（全ファイル）
+uv run pre-commit run --all-files
 
 # 開発サーバー起動
 uv run uvicorn company_research_agent.main:app --reload

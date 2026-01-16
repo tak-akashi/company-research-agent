@@ -9,7 +9,7 @@ from company_research_agent.core.config import EDINETConfig
 def edinet_config() -> EDINETConfig:
     """Provide a test EDINET configuration."""
     return EDINETConfig(
-        api_key="test-api-key",
+        EDINET_API_KEY="test-api-key",
         base_url="https://api.edinet-fsa.go.jp/api/v2",
         timeout_list=30,
         timeout_download=60,

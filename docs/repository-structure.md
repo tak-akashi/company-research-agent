@@ -667,45 +667,70 @@ src/company_research_agent/
 
 ```gitignore
 # Python
-.venv/
 __pycache__/
-*.pyc
-*.pyo
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# 環境設定
-.env
-.env.local
-
-# データディレクトリ
-data/
-
-# ステアリングファイル
-.steering/
+# Virtual environments
+.venv/
+venv/
+ENV/
 
 # IDE
 .idea/
 .vscode/
 *.swp
+*.swo
 
-# ビルド成果物
-dist/
-build/
-*.egg-info/
+# Environment
+.env
+.env.local
+.env.*.local
 
-# カバレッジ
-htmlcov/
-.coverage
-coverage.xml
+# Cache
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
-# ログ
+# Logs
 *.log
+logs/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
 ```
 
 ---

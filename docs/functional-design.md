@@ -329,10 +329,10 @@ class DocumentMetadata:
     doc_id: str
     edinet_code: str
     sec_code: str | None
-    filer_name: str
+    filer_name: str | None
     doc_type_code: str
-    doc_description: str
-    submit_datetime: str
+    doc_description: str | None
+    submit_datetime: str | None
     xbrl_flag: bool
     pdf_flag: bool
 

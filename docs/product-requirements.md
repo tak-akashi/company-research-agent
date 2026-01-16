@@ -226,10 +226,12 @@
 ```python
 # 基本的な使い方の例
 
-from company_research_agent import EDINETClient, XBRLParser, FinancialAnalyzer
+from company_research_agent.clients.edinet_client import EDINETClient
+from company_research_agent.core.config import EDINETConfig
 
-# クライアント初期化
-client = EDINETClient(api_key="YOUR_API_KEY")
+# クライアント初期化（環境変数EDINET_API_KEYから自動読み込み）
+config = EDINETConfig()
+client = EDINETClient(config)
 
 # 書類検索
 documents = client.search(

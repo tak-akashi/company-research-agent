@@ -40,12 +40,16 @@ async def main():
         docs = await client.get_document_list(date(2024, 6, 28))
         print(f"書類数: {docs.metadata.resultset.count}")
 
-        # 有価証券報告書のPDFをダウンロード
+        # 有価証券報告書のPDFをダウンロード（最大10件）
+        download_count = 0
         for doc in docs.results or []:
             if doc.doc_type_code == "120" and doc.pdf_flag:
                 await client.download_document(
                     doc.doc_id, 2, Path(f"downloads/{doc.doc_id}.pdf")
                 )
+                download_count += 1
+                if download_count >= 10:
+                    break
 
 asyncio.run(main())
 ```
@@ -84,12 +88,21 @@ uv run python -m src.mcp_servers.pdf_tools.server
 ## 開発
 
 ```bash
+# pre-commit フックのインストール（初回のみ）
+uv run pre-commit install
+
 # テスト実行
 uv run pytest
 
 # 型チェック
 uv run mypy
 
-# Lint
+# Lint & フォーマット
 uv run ruff check src/
+uv run ruff format src/
+
+# pre-commit 手動実行（全ファイル）
+uv run pre-commit run --all-files
 ```
+
+コミット時に自動で ruff, ruff-format, mypy が実行されます。
