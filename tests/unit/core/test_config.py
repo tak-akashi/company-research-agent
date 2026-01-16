@@ -34,13 +34,17 @@ class TestEDINETConfig:
 
     def test_api_key_required(self) -> None:
         """EDINETConfig should require api_key."""
-        with pytest.raises(ValidationError) as exc_info:
-            EDINETConfig()  # type: ignore[call-arg]
+        # Clear EDINET_API_KEY env var and disable .env file to test validation
+        env_without_key = {k: v for k, v in os.environ.items() if k != "EDINET_API_KEY"}
+        with patch.dict(os.environ, env_without_key, clear=True):
+            with pytest.raises(ValidationError) as exc_info:
+                EDINETConfig(_env_file=None)  # type: ignore[call-arg]
 
-        errors = exc_info.value.errors()
-        assert any(
-            error["loc"] == ("api_key",) or error["loc"] == ("EDINET_API_KEY",) for error in errors
-        )
+            errors = exc_info.value.errors()
+            assert any(
+                error["loc"] == ("api_key",) or error["loc"] == ("EDINET_API_KEY",)
+                for error in errors
+            )
 
     def test_from_environment_variable(self) -> None:
         """EDINETConfig should read api_key from EDINET_API_KEY env var."""
