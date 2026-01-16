@@ -999,7 +999,7 @@ financials = await repo.get_by_doc_ids(doc_ids)  # 1回クエリ
 | ツール | バージョン | インストール方法 |
 |--------|-----------|-----------------|
 | Python | 3.11+ | pyenv, asdf, または公式インストーラー |
-| uv | 0.5+ | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| uv | 0.9+ | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Docker | 24+ | Docker Desktop |
 
 #### セットアップ手順
@@ -1203,9 +1203,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.5.x"
+          version: "0.9.x"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -1221,9 +1221,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.5.x"
+          version: "0.9.x"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -1237,9 +1237,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
-          version: "0.5.x"
+          version: "0.9.x"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install dependencies

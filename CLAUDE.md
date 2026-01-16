@@ -14,7 +14,7 @@ AI-powered Corporate Research Agent - 企業情報収集・分析エージェン
 | 分類 | 技術 |
 |------|------|
 | 言語 | Python 3.11+ |
-| パッケージ管理 | uv 0.5+ |
+| パッケージ管理 | uv 0.9+ |
 | Webフレームワーク | FastAPI |
 | ORM | SQLAlchemy 2.0+ (asyncpg) |
 | データベース | PostgreSQL 15+ + pgvector |
