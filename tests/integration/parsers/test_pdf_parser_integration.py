@@ -444,7 +444,7 @@ class TestYomitokuIntegration:
     def yomitoku_available(self) -> bool:
         """Check if yomitoku is available."""
         try:
-            import yomitoku  # noqa: F401
+            import yomitoku  # type: ignore[import-not-found]  # noqa: F401
 
             return True
         except ImportError:

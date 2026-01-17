@@ -22,7 +22,7 @@ class GoogleProvider(BaseLLMProvider):
         >>> result = await provider.ainvoke_structured(prompt, BusinessSummary)
     """
 
-    DEFAULT_MODEL = "gemini-2.5-flash-preview-05-20"
+    DEFAULT_MODEL = "gemini-2.5-flash"
     """デフォルトのモデル名."""
 
     def __init__(self, config: LLMConfig) -> None:

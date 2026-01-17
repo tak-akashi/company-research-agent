@@ -3,6 +3,237 @@
 AI-powered Corporate Research Agent - 企業情報収集・分析エージェント
 EDINETや企業ホームページを検索してその結果をまとめるエージェントの構築プロジェクト（構築中）
 
+## アーキテクチャ
+
+### ディレクトリ構造
+
+```
+src/company_research_agent/
+├── api/           # REST API (FastAPI)
+├── clients/       # 外部APIクライアント (EDINET, Gemini)
+├── parsers/       # XBRL/PDF解析
+├── services/      # ビジネスロジック
+├── repositories/  # データアクセス
+├── models/        # SQLAlchemyモデル
+├── schemas/       # Pydanticスキーマ
+├── llm/           # LLMプロバイダー抽象化
+├── orchestrator/  # 自然言語検索オーケストレーター
+├── tools/         # LangChainツール群
+├── prompts/       # LLMプロンプト
+├── workflows/     # LangGraphワークフロー
+└── core/          # 設定、例外、ユーティリティ
+
+tests/
+├── unit/          # ユニットテスト
+├── integration/   # 統合テスト
+└── e2e/           # E2Eテスト
+
+docs/              # プロジェクトドキュメント
+scripts/           # ユーティリティスクリプト
+```
+
+### レイヤー構成図
+
+```mermaid
+graph TD
+    subgraph "API Layer"
+        API[api/]
+    end
+
+    subgraph "Service Layer"
+        SVC[services/]
+        ORCH[orchestrator/]
+    end
+
+    subgraph "Data Access Layer"
+        REPO[repositories/]
+        CLIENT[clients/]
+        PARSER[parsers/]
+        TOOLS[tools/]
+    end
+
+    subgraph "Domain Layer"
+        MODEL[models/]
+        SCHEMA[schemas/]
+    end
+
+    subgraph "Infrastructure"
+        CORE[core/]
+        LLM[llm/]
+    end
+
+    subgraph "External"
+        EDINET[(EDINET API)]
+        LLM_API[(LLM APIs)]
+        DB[(PostgreSQL)]
+    end
+
+    API --> SVC
+    API --> ORCH
+    ORCH --> TOOLS
+    TOOLS --> CLIENT
+    TOOLS --> PARSER
+    TOOLS --> LLM
+    SVC --> REPO
+    SVC --> CLIENT
+    SVC --> PARSER
+    REPO --> MODEL
+    REPO --> DB
+    CLIENT --> EDINET
+    CLIENT --> CORE
+    PARSER --> LLM
+    LLM --> LLM_API
+    SVC --> SCHEMA
+    API --> SCHEMA
+    ORCH --> SCHEMA
+```
+
+### データフロー
+
+```mermaid
+flowchart LR
+    subgraph Input
+        EDINET[EDINET API]
+        PDF[PDF Files]
+    end
+
+    subgraph Processing
+        CLIENT[EDINETClient]
+        PARSER[PDFParser]
+        LLM[LLM Provider]
+    end
+
+    subgraph Output
+        MD[Markdown]
+        DATA[Structured Data]
+    end
+
+    EDINET --> CLIENT
+    CLIENT --> PDF
+    PDF --> PARSER
+    PARSER --> LLM
+    LLM --> MD
+    PARSER --> DATA
+```
+
+### LangGraph ワークフロー
+
+有価証券報告書のLLM分析ワークフロー（`AnalysisGraph`）のノード構成：
+
+```mermaid
+graph TD
+    START((Start)) --> edinet
+
+    subgraph "データ取得"
+        edinet[EDINETNode<br/>書類ダウンロード]
+        pdf_parse[PDFParseNode<br/>PDF解析・Markdown変換]
+    end
+
+    subgraph "並列LLM分析"
+        business_summary[BusinessSummaryNode<br/>事業内容要約]
+        risk_extraction[RiskExtractionNode<br/>リスク情報抽出]
+        financial_analysis[FinancialAnalysisNode<br/>財務分析]
+    end
+
+    subgraph "統合処理"
+        period_comparison[PeriodComparisonNode<br/>前期比較分析]
+        aggregator[AggregatorNode<br/>レポート統合]
+    end
+
+    edinet --> pdf_parse
+    pdf_parse --> business_summary
+    pdf_parse --> risk_extraction
+    pdf_parse --> financial_analysis
+    business_summary --> period_comparison
+    risk_extraction --> period_comparison
+    financial_analysis --> period_comparison
+    period_comparison --> aggregator
+    aggregator --> END((End))
+
+    style edinet fill:#e1f5fe
+    style pdf_parse fill:#e1f5fe
+    style business_summary fill:#fff3e0
+    style risk_extraction fill:#fff3e0
+    style financial_analysis fill:#fff3e0
+    style period_comparison fill:#e8f5e9
+    style aggregator fill:#e8f5e9
+```
+
+| ノード | 説明 | 入力 | 出力 |
+|--------|------|------|------|
+| `edinet` | EDINET APIから書類をダウンロード | doc_id | pdf_path |
+| `pdf_parse` | PDFをMarkdown形式に変換 | pdf_path | markdown_content |
+| `business_summary` | 事業内容の要約を生成 | markdown_content | business_summary |
+| `risk_extraction` | リスク情報を抽出・分類 | markdown_content | risk_analysis |
+| `financial_analysis` | 財務指標を分析 | markdown_content | financial_analysis |
+| `period_comparison` | 前期との比較分析 | 各分析結果 | period_comparison |
+| `aggregator` | 全分析結果を統合レポート化 | 全結果 | final_report |
+
+### 自然言語検索オーケストレーター
+
+ReActエージェントベースの自然言語検索オーケストレーター（`QueryOrchestrator`）のアーキテクチャ：
+
+```mermaid
+graph TD
+    subgraph "QueryOrchestrator"
+        AGENT[ReAct Agent<br/>LangGraph]
+        PROMPT[System Prompt<br/>意図判定ルール]
+    end
+
+    subgraph "検索系ツール"
+        SEARCH_COMPANY[search_company<br/>企業名検索]
+        SEARCH_DOCS[search_documents<br/>書類検索]
+        DOWNLOAD[download_document<br/>書類ダウンロード]
+    end
+
+    subgraph "分析系ツール"
+        ANALYZE[analyze_document<br/>AnalysisGraph]
+        COMPARE[compare_documents<br/>書類比較]
+        SUMMARIZE[summarize_document<br/>書類要約]
+    end
+
+    subgraph "データソース"
+        EDINET_LIST[EDINETCodeListClient<br/>企業リスト・キャッシュ]
+        EDINET_API[EDINET API]
+        PDF_PARSER[PDFParser]
+        LLM[LLM Provider]
+    end
+
+    AGENT --> SEARCH_COMPANY
+    AGENT --> SEARCH_DOCS
+    AGENT --> DOWNLOAD
+    AGENT --> ANALYZE
+    AGENT --> COMPARE
+    AGENT --> SUMMARIZE
+
+    SEARCH_COMPANY --> EDINET_LIST
+    SEARCH_DOCS --> EDINET_API
+    DOWNLOAD --> EDINET_API
+    ANALYZE --> PDF_PARSER
+    ANALYZE --> LLM
+    COMPARE --> PDF_PARSER
+    COMPARE --> LLM
+    SUMMARIZE --> PDF_PARSER
+    SUMMARIZE --> LLM
+
+    style AGENT fill:#e3f2fd
+    style SEARCH_COMPANY fill:#fff3e0
+    style SEARCH_DOCS fill:#fff3e0
+    style DOWNLOAD fill:#fff3e0
+    style ANALYZE fill:#e8f5e9
+    style COMPARE fill:#e8f5e9
+    style SUMMARIZE fill:#e8f5e9
+```
+
+| ツール | 説明 | 入力 | 出力 |
+|--------|------|------|------|
+| `search_company` | 企業名のあいまい検索 | query | CompanyCandidate[] |
+| `search_documents` | EDINET書類検索 | edinet_code, doc_type_codes | DocumentMetadata[] |
+| `download_document` | 書類PDFダウンロード | doc_id | pdf_path |
+| `analyze_document` | AnalysisGraphによる詳細分析 | doc_id | ComprehensiveReport |
+| `compare_documents` | 複数書類の比較分析 | doc_ids, aspects | ComparisonReport |
+| `summarize_document` | 書類要約 | doc_id, focus | Summary |
+
 ## セットアップ
 
 ```bash
@@ -196,6 +427,232 @@ result = parser.to_markdown(Path("document.pdf"), strategy="auto")
 # 直接Geminiを使用
 result = parser.to_markdown(Path("document.pdf"), strategy="gemini")
 ```
+
+## 自然言語検索オーケストレーター
+
+自然言語クエリを処理するReActエージェントベースのオーケストレーターです。
+「トヨタの有報を分析して」のような自然言語で企業リサーチを実行できます。
+
+### 基本的な使用例
+
+```python
+import asyncio
+
+from company_research_agent.orchestrator import QueryOrchestrator
+
+async def main():
+    orchestrator = QueryOrchestrator()
+
+    # 企業検索
+    result = await orchestrator.process("トヨタの有報を探して")
+    print(f"意図: {result.intent}")  # "検索"
+    print(f"使用ツール: {result.tools_used}")  # ["search_company", "search_documents"]
+    print(f"結果: {result.result}")  # エージェントの応答テキスト
+
+asyncio.run(main())
+```
+
+### OrchestratorResultの構造
+
+`process()`メソッドは`OrchestratorResult`を返します。
+
+```python
+from company_research_agent.schemas.query_schemas import OrchestratorResult
+
+# OrchestratorResultの属性
+result.query        # 元のクエリ（str）
+result.intent       # 判定された意図: "検索" | "分析" | "比較" | "要約" | "取得" | "その他"
+result.tools_used   # 使用されたツールのリスト（list[str]）
+result.result       # 処理結果（エージェントの最終応答）
+```
+
+### ユースケース別の使用例
+
+#### 1. 企業検索（書類リストの取得）
+
+```python
+async def search_example():
+    orchestrator = QueryOrchestrator()
+
+    # 企業名で書類を検索
+    result = await orchestrator.process("トヨタの有価証券報告書を探して")
+
+    print(f"意図: {result.intent}")  # "検索"
+    print(f"ツール: {result.tools_used}")  # ["search_company", "search_documents"]
+    print(result.result)
+    # -> トヨタ自動車株式会社（E02144）の有価証券報告書を検索しました。
+    #    見つかった書類: ...
+```
+
+#### 2. 書類分析（詳細レポート生成）
+
+```python
+async def analyze_example():
+    orchestrator = QueryOrchestrator()
+
+    # 書類の詳細分析
+    result = await orchestrator.process("トヨタの最新の有報を分析して")
+
+    print(f"意図: {result.intent}")  # "分析"
+    print(f"ツール: {result.tools_used}")
+    # ["search_company", "search_documents", "analyze_document"]
+
+    # result.resultにはComprehensiveReportの内容が含まれる
+    print(result.result)
+```
+
+#### 3. 企業比較
+
+```python
+async def compare_example():
+    orchestrator = QueryOrchestrator()
+
+    # 複数企業の比較分析
+    result = await orchestrator.process(
+        "トヨタとホンダの有報を事業内容と財務状況で比較して"
+    )
+
+    print(f"意図: {result.intent}")  # "比較"
+    print(f"ツール: {result.tools_used}")
+    # ["search_company", "search_documents", "compare_documents"]
+```
+
+#### 4. 書類要約
+
+```python
+async def summarize_example():
+    orchestrator = QueryOrchestrator()
+
+    # 特定の観点で要約
+    result = await orchestrator.process(
+        "トヨタの有報をリスク情報に焦点を当てて要約して"
+    )
+
+    print(f"意図: {result.intent}")  # "要約"
+    print(f"ツール: {result.tools_used}")
+    # ["search_company", "search_documents", "summarize_document"]
+```
+
+### ツールを直接使用する
+
+オーケストレーターを介さず、各ツールを直接呼び出すことも可能です。
+
+```python
+import asyncio
+
+from company_research_agent.tools import (
+    search_company,
+    search_documents,
+    download_document,
+    analyze_document,
+    compare_documents,
+    summarize_document,
+)
+
+async def main():
+    # 企業検索
+    candidates = await search_company.ainvoke({
+        "query": "トヨタ",
+        "limit": 5
+    })
+    for c in candidates:
+        print(f"{c.company.company_name} (スコア: {c.similarity_score:.1f})")
+
+    # 書類検索
+    edinet_code = candidates[0].company.edinet_code  # "E02144"
+    docs = await search_documents.ainvoke({
+        "edinet_code": edinet_code,
+        "doc_type_codes": ["120"],  # 有価証券報告書
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
+    })
+
+    # 書類ダウンロード
+    doc_id = docs[0].doc_id  # "S100XXXX"
+    pdf_path = await download_document.ainvoke({"doc_id": doc_id})
+    print(f"ダウンロード先: {pdf_path}")
+
+    # 書類分析（詳細レポート生成）
+    report = await analyze_document.ainvoke({"doc_id": doc_id})
+    print(f"事業概要: {report.business_summary.business_description}")
+
+    # 書類要約
+    summary = await summarize_document.ainvoke({
+        "doc_id": doc_id,
+        "focus": "リスク情報"  # オプション: 焦点を当てる観点
+    })
+    print(f"要約: {summary.summary_text}")
+
+asyncio.run(main())
+```
+
+### 企業名のあいまい検索
+
+`EDINETCodeListClient`を使用して、企業名のあいまい検索ができます。
+
+```python
+import asyncio
+
+from company_research_agent.clients import EDINETCodeListClient
+
+async def main():
+    client = EDINETCodeListClient()
+
+    # 企業名で検索（類似度スコア付き）
+    candidates = await client.search_companies("トヨタ")
+    for c in candidates:
+        print(f"{c.company.company_name} - スコア: {c.similarity_score:.1f}")
+        # トヨタ自動車株式会社 - スコア: 95.0
+        # トヨタ紡織株式会社 - スコア: 80.0
+        # ...
+
+    # EDINETコードで直接取得
+    company = await client.get_by_edinet_code("E02144")
+    print(company.company_name)  # トヨタ自動車株式会社
+
+    # 証券コードで直接取得
+    company = await client.get_by_sec_code("7203")
+    print(company.company_name)  # トヨタ自動車株式会社
+
+asyncio.run(main())
+```
+
+### カスタムLLMプロバイダーの使用
+
+```python
+from company_research_agent.llm import create_llm_provider
+from company_research_agent.llm.config import LLMConfig
+from company_research_agent.orchestrator import QueryOrchestrator
+
+# カスタムプロバイダーを作成
+config = LLMConfig(provider="anthropic", model="claude-sonnet-4-20250514")
+provider = create_llm_provider(config)
+
+# オーケストレーターに渡す
+orchestrator = QueryOrchestrator(llm_provider=provider)
+result = await orchestrator.process("トヨタの有報を分析して")
+```
+
+### 対応クエリパターン
+
+| クエリ例 | 判定意図 | 使用ツール |
+|---------|---------|-----------|
+| 「トヨタの有報を探して」 | 検索 | search_company, search_documents |
+| 「トヨタの有報を分析して」 | 分析 | search_company, search_documents, analyze_document |
+| 「トヨタとホンダを比較して」 | 比較 | search_company, search_documents, compare_documents |
+| 「この有報を要約して」 | 要約 | summarize_document |
+| 「S100XXXXをダウンロードして」 | 取得 | download_document |
+
+### ツール一覧
+
+| ツール | 説明 | 入力 | 出力 |
+|--------|------|------|------|
+| `search_company` | 企業名のあいまい検索 | query, limit | CompanyCandidate[] |
+| `search_documents` | EDINET書類検索 | edinet_code, doc_type_codes, start_date, end_date | DocumentMetadata[] |
+| `download_document` | 書類PDFダウンロード | doc_id | pdf_path (str) |
+| `analyze_document` | AnalysisGraphによる詳細分析 | doc_id, prior_doc_id | ComprehensiveReport |
+| `compare_documents` | 複数書類の比較分析 | doc_ids, aspects | ComparisonReport |
+| `summarize_document` | 書類要約 | doc_id, focus | Summary |
 
 ## LLMプロバイダー設定
 

@@ -269,6 +269,36 @@ print(indicators)
 from company_research_agent import Database
 db = Database(connection_string="postgresql://...")
 db.save(financial_data)
+
+# 自然言語検索オーケストレーター
+from company_research_agent.orchestrator import QueryOrchestrator
+
+orchestrator = QueryOrchestrator()
+
+# 検索クエリ
+result = await orchestrator.process("トヨタの有報を探して")
+print(result.intent)  # "検索"
+print(result.tools_used)  # ["search_company", "search_documents"]
+
+# 分析クエリ
+result = await orchestrator.process("トヨタの有報を分析して")
+print(result.intent)  # "分析"
+
+# 比較クエリ
+result = await orchestrator.process("トヨタとホンダを比較して")
+print(result.intent)  # "比較"
+
+# 要約クエリ
+result = await orchestrator.process("この有報を要約して")
+print(result.intent)  # "要約"
+
+# 企業検索（あいまい検索）
+from company_research_agent.clients import EDINETCodeListClient
+
+client = EDINETCodeListClient()
+candidates = await client.search_companies("トヨタ")
+for c in candidates:
+    print(f"{c.company.company_name} - スコア: {c.similarity_score}")
 ```
 
 ### 重要機能(P1)
@@ -292,13 +322,13 @@ db.save(financial_data)
 個人投資家として、取得した財務データと開示書類の内容をAIで分析し、要約や洞察を得るために、LLM分析機能が欲しい
 
 **受け入れ条件**:
-- [ ] 有価証券報告書の「事業の状況」「経営者による分析」等を要約できる（BusinessSummaryNode）
-- [ ] 財務データの特徴や変化点を自動で抽出・解説できる（FinancialAnalysisNode）
-- [ ] リスク要因の抽出と整理ができる（RiskExtractionNode）
-- [ ] 前期比較による変化点の自動検出ができる（PeriodComparisonNode）
-- [ ] 各分析結果を統合したレポートを生成できる（AggregatorNode）
-- [ ] 各ノードを個別に実行できる（部分実行対応）
-- [ ] 分析ノード（Business, Risk, Financial）を並列実行できる
+- [x] 有価証券報告書の「事業の状況」「経営者による分析」等を要約できる（BusinessSummaryNode）
+- [x] 財務データの特徴や変化点を自動で抽出・解説できる（FinancialAnalysisNode）
+- [x] リスク要因の抽出と整理ができる（RiskExtractionNode）
+- [x] 前期比較による変化点の自動検出ができる（PeriodComparisonNode）
+- [x] 各分析結果を統合したレポートを生成できる（AggregatorNode）
+- [x] 各ノードを個別に実行できる（部分実行対応）
+- [x] 分析ノード（Business, Risk, Financial）を並列実行できる
 - [x] 複数のLLMプロバイダー（OpenAI、Google、Anthropic、Ollama）を切り替えて使用できる
 - [x] 環境変数（LLM_PROVIDER）でプロバイダーを設定できる
 - [x] ビジョン機能（PDF解析用）で別のプロバイダーを指定できる（LLM_VISION_PROVIDER）
@@ -317,6 +347,52 @@ EDINETNode → PDFParseNode → [BusinessSummaryNode, RiskExtractionNode, Financ
 | 前期比較 | 5社×2期 | 重要な変化点が3件以上検出される |
 | 並列実行 | 3ノード同時 | 逐次実行より高速化 |
 | 個別出力 | 各ノード単独 | 他ノードに影響なく実行可能 |
+
+**優先度**: P0(必須)
+
+#### 8. 自然言語検索オーケストレーター
+
+**ユーザーストーリー**:
+個人投資家として、「トヨタの有報を分析して」のような自然言語で企業リサーチを行うために、クエリを理解して適切な処理を実行するオーケストレーターが欲しい
+
+**受け入れ条件**:
+- [x] 企業名で検索し、類似度スコア付き候補リストを返せる
+- [x] 「探して」→ 書類検索のみ実行
+- [x] 「分析して」→ 書類検索 + AnalysisGraph実行
+- [x] 「比較して」→ 複数書類の比較分析
+- [x] 「要約して」→ 書類の要約生成
+- [x] EDINETコードリストのキャッシュ（7日間有効）
+- [x] ReActエージェントによる動的なツール選択
+
+**アーキテクチャ**:
+```
+ユーザークエリ
+     │
+     ▼
+┌─────────────────────────────────────────────────────────┐
+│  QueryOrchestrator (ReActエージェント)                   │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │  ツール群                                        │   │
+│  │  [検索系]                                       │   │
+│  │  - search_company      企業名→候補リスト        │   │
+│  │  - search_documents    条件→書類リスト          │   │
+│  │  - download_document   書類→PDFパス            │   │
+│  │  [分析系]                                       │   │
+│  │  - analyze_document    AnalysisGraph wrapper   │   │
+│  │  - compare_documents   PDFParser + LLM比較     │   │
+│  │  - summarize_document  PDFParser + LLM要約     │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**検証方法**:
+| 検証項目 | テストデータ | 合格基準 |
+|---------|------------|---------|
+| 企業検索 | 「トヨタ」で検索 | トヨタ自動車、トヨタ紡織等が候補として返る |
+| 検索クエリ | 「トヨタの有報を探して」 | 書類リストを返す |
+| 分析クエリ | 「トヨタの有報を分析して」 | ComprehensiveReportを返す |
+| 比較クエリ | 「トヨタとホンダを比較して」 | ComparisonReportを返す |
+| 要約クエリ | 「この有報を要約して」 | Summaryを返す |
 
 **優先度**: P0(必須)
 
@@ -503,6 +579,31 @@ TDnetのAPIは有料（月額数十万円）のため、優先度を下げて将
 - [x] 統合レポートが生成される
 - [x] ユニットテストがパスする（29件パス）
 
+### フェーズ3.5: 自然言語検索オーケストレーター【完了】
+
+**目標**: 自然言語クエリを処理するReActエージェントベースのオーケストレーターを実装する
+
+**実装内容**:
+- EDINETCodeListClient: 企業名のあいまい検索（rapidfuzz使用）、7日間キャッシュ
+- 6つのLangChainツール:
+  - search_company: 企業検索
+  - search_documents: 書類検索
+  - download_document: 書類ダウンロード
+  - analyze_document: AnalysisGraph wrapper
+  - compare_documents: PDFParser + LLM比較
+  - summarize_document: PDFParser + LLM要約
+- QueryOrchestrator: LangGraph create_react_agent による動的ツール選択
+
+**成功基準**:
+- [x] 企業名で検索し、類似度スコア付き候補リストを返せる
+- [x] 「探して」→ 書類検索のみ実行
+- [x] 「分析して」→ 書類検索 + AnalysisGraph実行
+- [x] 「比較して」→ 複数書類の比較分析
+- [x] 「要約して」→ 書類の要約生成
+- [x] EDINETコードリストのキャッシュ（7日間有効）
+- [x] ReActエージェントによる動的なツール選択
+- [x] ユニットテスト31件パス
+
 ### フェーズ4: XBRL解析（PoC）
 
 **目標**: XBRLから財務三表の主要項目を抽出できる状態にする
@@ -568,5 +669,6 @@ TDnetのAPIは有料（月額数十万円）のため、優先度を下げて将
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月17日
+**バージョン**: 1.1
+**ステータス**: 実装進行中（フェーズ3.5完了）

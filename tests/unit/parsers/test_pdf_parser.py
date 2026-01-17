@@ -301,7 +301,7 @@ class TestPDFParserYomitokuStrategy:
         def mock_import(name: str, *args: object, **kwargs: object) -> object:
             if name == "yomitoku" or name.startswith("yomitoku."):
                 raise ModuleNotFoundError(f"No module named '{name}'")
-            return original_import(name, *args, **kwargs)
+            return original_import(name, *args, **kwargs)  # type: ignore[arg-type]
 
         with (
             patch("pdfplumber.open") as mock_pdfplumber,

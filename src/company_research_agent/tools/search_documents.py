@@ -1,0 +1,98 @@
+"""書類検索ツール."""
+
+from __future__ import annotations
+
+import logging
+from datetime import date, datetime
+from typing import Annotated
+
+from langchain_core.tools import tool
+
+from company_research_agent.clients.edinet_client import EDINETClient
+from company_research_agent.core.config import EDINETConfig
+from company_research_agent.schemas.document_filter import DocumentFilter
+from company_research_agent.schemas.edinet_schemas import DocumentMetadata
+from company_research_agent.services.edinet_document_service import EDINETDocumentService
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_date(date_str: str | None) -> date | None:
+    """日付文字列をdateオブジェクトに変換.
+
+    Args:
+        date_str: 日付文字列（YYYY-MM-DD形式）またはNone
+
+    Returns:
+        dateオブジェクトまたはNone
+    """
+    if date_str is None:
+        return None
+
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        logger.warning(f"Invalid date format: {date_str}, expected YYYY-MM-DD")
+        return None
+
+
+@tool
+async def search_documents(
+    edinet_code: Annotated[str, "企業のEDINETコード（例: E02144）"],
+    doc_type_codes: Annotated[
+        list[str] | None,
+        "書類種別コード（120=有価証券報告書, 140=四半期報告書, 160=臨時報告書等）",
+    ] = None,
+    start_date: Annotated[
+        str | None,
+        "検索開始日（YYYY-MM-DD形式）",
+    ] = None,
+    end_date: Annotated[
+        str | None,
+        "検索終了日（YYYY-MM-DD形式）",
+    ] = None,
+) -> list[DocumentMetadata]:
+    """EDINET書類を検索する。
+
+    指定された企業のEDINETコードに基づいて書類を検索し、
+    書類種別や日付範囲でフィルタリングする。
+
+    Args:
+        edinet_code: 企業のEDINETコード（例: E02144）
+        doc_type_codes: 書類種別コードのリスト（省略時は全種別）
+            - 120: 有価証券報告書
+            - 140: 四半期報告書
+            - 160: 臨時報告書
+        start_date: 検索開始日（YYYY-MM-DD形式、省略時は終了日と同じ）
+        end_date: 検索終了日（YYYY-MM-DD形式、省略時は今日）
+
+    Returns:
+        書類メタデータのリスト
+
+    Example:
+        >>> docs = await search_documents(
+        ...     edinet_code="E02144",
+        ...     doc_type_codes=["120"],
+        ...     start_date="2024-01-01",
+        ...     end_date="2024-12-31",
+        ... )
+    """
+    logger.info(
+        f"Searching documents for {edinet_code}, "
+        f"doc_types={doc_type_codes}, start={start_date}, end={end_date}"
+    )
+
+    doc_filter = DocumentFilter(
+        edinet_code=edinet_code,
+        doc_type_codes=doc_type_codes,
+        start_date=_parse_date(start_date),
+        end_date=_parse_date(end_date),
+    )
+
+    config = EDINETConfig()  # type: ignore[call-arg]
+    async with EDINETClient(config) as client:
+        service = EDINETDocumentService(client)
+        documents = await service.search_documents(doc_filter)
+
+    logger.info(f"Found {len(documents)} documents")
+    return documents

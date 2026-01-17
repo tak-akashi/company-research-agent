@@ -115,7 +115,7 @@ class TestEDINETNode:
     @pytest.mark.asyncio
     async def test_execute_missing_doc_id(self, edinet_node: EDINETNode) -> None:
         """doc_idがない場合のエラーをテスト."""
-        state: AnalysisState = {"errors": [], "completed_nodes": []}  # type: ignore[typeddict-item]
+        state: AnalysisState = {"errors": [], "completed_nodes": []}
         with pytest.raises(ValueError, match="Required field is missing or empty: doc_id"):
             await edinet_node.execute(state)
 
@@ -131,7 +131,7 @@ class TestEDINETNode:
             "doc_id": "S100TEST",
             "errors": [],
             "completed_nodes": [],
-        }  # type: ignore[typeddict-item]
+        }
 
         result = await edinet_node.execute(state)
         assert result == str(pdf_file)
@@ -152,7 +152,7 @@ class TestPDFParseNode:
     @pytest.mark.asyncio
     async def test_execute_missing_pdf_path(self, pdf_parse_node: PDFParseNode) -> None:
         """pdf_pathがない場合のエラーをテスト."""
-        state: AnalysisState = {"errors": [], "completed_nodes": []}  # type: ignore[typeddict-item]
+        state: AnalysisState = {"errors": [], "completed_nodes": []}
         with pytest.raises(ValueError, match="Required field is missing or empty: pdf_path"):
             await pdf_parse_node.execute(state)
 
@@ -246,7 +246,7 @@ class TestAggregatorNode:
             "financial_analysis": None,
             "errors": [],
             "completed_nodes": [],
-        }  # type: ignore[typeddict-item]
+        }
         with pytest.raises(ValueError, match="At least one analysis result is required"):
             await aggregator_node.execute(state)
 
@@ -305,6 +305,7 @@ class TestSchemas:
                 FinancialHighlight(
                     metric_name="売上高",
                     current_value="1,000億円",
+                    prior_value="900億円",
                     change_rate="+10.0%",
                     comment="過去最高",
                 )

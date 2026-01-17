@@ -1,5 +1,7 @@
 """各LLMプロバイダーのテスト."""
 
+# mypy: disable-error-code="call-arg"
+
 import os
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -420,7 +422,9 @@ class TestAllProvidersCommonBehavior:
             (OllamaProvider, {"LLM_PROVIDER": "ollama"}),
         ],
     )
-    def test_all_providers_have_provider_name(self, provider_class: type, env_vars: dict) -> None:
+    def test_all_providers_have_provider_name(
+        self, provider_class: type, env_vars: dict[str, str]
+    ) -> None:
         """全プロバイダーがprovider_nameを持つことを確認."""
         with patch.dict(os.environ, env_vars, clear=True):
             config = LLMConfig(_env_file=None)
@@ -437,7 +441,9 @@ class TestAllProvidersCommonBehavior:
             (OllamaProvider, {"LLM_PROVIDER": "ollama"}),
         ],
     )
-    def test_all_providers_have_model_name(self, provider_class: type, env_vars: dict) -> None:
+    def test_all_providers_have_model_name(
+        self, provider_class: type, env_vars: dict[str, str]
+    ) -> None:
         """全プロバイダーがmodel_nameを持つことを確認."""
         with patch.dict(os.environ, env_vars, clear=True):
             config = LLMConfig(_env_file=None)
@@ -454,7 +460,9 @@ class TestAllProvidersCommonBehavior:
             (OllamaProvider, {"LLM_PROVIDER": "ollama"}),
         ],
     )
-    def test_all_providers_have_supports_vision(self, provider_class: type, env_vars: dict) -> None:
+    def test_all_providers_have_supports_vision(
+        self, provider_class: type, env_vars: dict[str, str]
+    ) -> None:
         """全プロバイダーがsupports_visionを持つことを確認."""
         with patch.dict(os.environ, env_vars, clear=True):
             config = LLMConfig(_env_file=None)

@@ -1,6 +1,9 @@
 """LLMプロバイダーファクトリーのテスト."""
 
+# mypy: disable-error-code="call-arg"
+
 import os
+from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
@@ -19,7 +22,7 @@ from company_research_agent.llm.providers.openai import OpenAIProvider
 
 
 @pytest.fixture(autouse=True)
-def clean_env() -> None:
+def clean_env() -> Generator[None, None, None]:
     """テスト前に環境変数をクリアし、キャッシュをリセット."""
     with patch.dict(os.environ, {}, clear=True):
         clear_provider_cache()

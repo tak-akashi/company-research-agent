@@ -163,3 +163,39 @@ class LLMAnalysisError(CompanyResearchAgentError):
             parts.append(f"({self.model})")
         parts.append(f": {self.message}")
         return "".join(parts)
+
+
+@dataclass
+class CodeListDownloadError(CompanyResearchAgentError):
+    """Raised when EDINET code list download fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        url: The URL that was being downloaded.
+    """
+
+    message: str
+    url: str | None = None
+
+    def __str__(self) -> str:
+        if self.url:
+            return f"Code List Download Error for {self.url}: {self.message}"
+        return f"Code List Download Error: {self.message}"
+
+
+@dataclass
+class CompanyNotFoundError(CompanyResearchAgentError):
+    """Raised when a company is not found.
+
+    Attributes:
+        message: Error message describing the issue.
+        query: The search query that was used.
+    """
+
+    message: str
+    query: str | None = None
+
+    def __str__(self) -> str:
+        if self.query:
+            return f"Company Not Found for query '{self.query}': {self.message}"
+        return f"Company Not Found: {self.message}"

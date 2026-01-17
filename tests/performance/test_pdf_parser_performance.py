@@ -281,7 +281,7 @@ class TestStrategyPerformanceComparison:
 
         with patch("pdfplumber.open", return_value=mock_doc):
             start = time.perf_counter()
-            parser.to_markdown(test_pdf, strategy="pdfplumber")  # type: ignore[arg-type]
+            parser.to_markdown(test_pdf, strategy="pdfplumber")
             elapsed = time.perf_counter() - start
             results.append(
                 PerformanceResult(
@@ -300,7 +300,7 @@ class TestStrategyPerformanceComparison:
             patch("pymupdf4llm.to_markdown", return_value=mock_result),
         ):
             start = time.perf_counter()
-            parser.to_markdown(test_pdf, strategy="pymupdf4llm")  # type: ignore[arg-type]
+            parser.to_markdown(test_pdf, strategy="pymupdf4llm")
             elapsed = time.perf_counter() - start
             results.append(
                 PerformanceResult(

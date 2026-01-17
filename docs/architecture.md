@@ -126,6 +126,7 @@
 │   サービスレイヤー                                        │
 │   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
 │   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
+│   ├─ EDINETCodeListClient（企業検索）✅ 実装済          │
 │   ├─ LLMProvider（マルチLLM抽象化）✅ 実装済            │
 │   │   ├─ OpenAI / Google / Anthropic / Ollama         │
 │   ├─ VisionLLMClient（PDF解析用ビジョンLLM）✅ 実装済   │
@@ -133,6 +134,9 @@
 │   ├─ PDFParser（PDF解析）✅ 実装済                      │
 │   ├─ FinancialAnalyzer（財務分析）                       │
 │   ├─ AnalysisWorkflow（LangGraph LLM分析）✅ 実装済    │
+│   ├─ QueryOrchestrator（自然言語オーケストレーター）✅    │
+│   │   ├─ search_company / search_documents / download  │
+│   │   └─ analyze / compare / summarize ツール         │
 │   └─ VectorSearchService（ベクトル検索）                 │
 ├─────────────────────────────────────────────────────────┤
 │   リポジトリレイヤー                                      │
@@ -502,7 +506,20 @@ src/company_research_agent/
 │       ├── anthropic.py         # AnthropicProvider
 │       └── ollama.py            # OllamaProvider
 ├── clients/
+│   ├── edinet_client.py         # EDINET API通信 ✅ 実装済
+│   ├── edinet_code_list_client.py  # 企業検索（rapidfuzz） ✅ 実装済
 │   └── vision_client.py         # VisionLLMClient（PDF解析用） ✅ 実装済
+├── tools/                        # LangChainツール群 ✅ 実装済
+│   ├── __init__.py
+│   ├── search_company.py        # 企業検索ツール
+│   ├── search_documents.py      # 書類検索ツール
+│   ├── download_document.py     # 書類ダウンロードツール
+│   ├── analyze_document.py      # 分析ツール（AnalysisGraph wrapper）
+│   ├── compare_documents.py     # 比較ツール（PDFParser + LLM）
+│   └── summarize_document.py    # 要約ツール（PDFParser + LLM）
+├── orchestrator/                 # 自然言語オーケストレーター ✅ 実装済
+│   ├── __init__.py
+│   └── query_orchestrator.py    # QueryOrchestrator（ReActエージェント）
 ├── workflows/                    # LangGraphワークフロー
 │   ├── __init__.py
 │   ├── state.py                 # AnalysisState定義
@@ -750,6 +767,7 @@ dev = [
 | langchain-openai | OpenAI API連携 | 範囲指定（>=0.3,<1.0） |
 | langchain-anthropic | Anthropic API連携 | 範囲指定（>=0.3,<1.0） |
 | langchain-ollama | Ollama連携 | 範囲指定（>=0.2,<1.0） |
+| rapidfuzz | あいまい文字列マッチング | 範囲指定（>=3.0,<4.0） |
 | ruff | Linter | 最新許可（>=0.8） |
 | mypy | 型チェック | 最新許可（>=1.14） |
 | pytest | テスト | 最新許可（>=8.0） |
@@ -758,5 +776,5 @@ dev = [
 
 **作成日**: 2026年1月16日
 **更新日**: 2026年1月17日
-**バージョン**: 1.2
-**ステータス**: 実装完了（LLMマルチプロバイダー対応）
+**バージョン**: 1.3
+**ステータス**: 実装完了（自然言語オーケストレーター対応）

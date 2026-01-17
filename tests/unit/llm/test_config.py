@@ -1,5 +1,7 @@
 """LLMConfigのテスト."""
 
+# mypy: disable-error-code="call-arg"
+
 import os
 from unittest.mock import patch
 
