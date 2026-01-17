@@ -1,7 +1,36 @@
 """Configuration management for Company Research Agent."""
 
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LoggingConfig(BaseSettings):
+    """Configuration for application logging.
+
+    Attributes:
+        level: Log level (DEBUG, INFO, WARNING, ERROR).
+        format_style: Log format style (simple or detailed).
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO",
+        alias="LOG_LEVEL",
+        description="Logging level",
+    )
+    format_style: Literal["simple", "detailed"] = Field(
+        default="simple",
+        alias="LOG_FORMAT",
+        description="Logging format style",
+    )
 
 
 class GeminiConfig(BaseSettings):

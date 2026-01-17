@@ -8,6 +8,7 @@ from typing import Annotated
 from langchain_core.tools import tool
 
 from company_research_agent.clients.edinet_code_list_client import EDINETCodeListClient
+from company_research_agent.core.progress import print_info, print_status, print_success
 from company_research_agent.schemas.query_schemas import CompanyCandidate
 
 logger = logging.getLogger(__name__)
@@ -36,10 +37,15 @@ async def search_company(
         >>> for c in candidates:
         ...     print(f"{c.company.company_name} - {c.similarity_score}")
     """
+    print_status(f"企業を検索中: {query}")
     logger.info(f"Searching companies with query: {query}")
 
     client = EDINETCodeListClient()
     candidates = await client.search_companies(query, limit)
 
+    print_success(f"検索完了: {len(candidates)}件の候補が見つかりました")
+    if candidates:
+        top = candidates[0]
+        print_info(f"最有力候補: {top.company.company_name} (類似度: {top.similarity_score:.1f}%)")
     logger.info(f"Found {len(candidates)} candidates")
     return candidates

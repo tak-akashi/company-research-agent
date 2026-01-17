@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 
 from company_research_agent.clients.edinet_client import EDINETClient
 from company_research_agent.core.config import EDINETConfig
+from company_research_agent.core.progress import print_info, print_status, print_success
 from company_research_agent.schemas.document_filter import DocumentFilter
 from company_research_agent.schemas.edinet_schemas import DocumentMetadata
 from company_research_agent.services.edinet_document_service import EDINETDocumentService
@@ -77,6 +78,7 @@ async def search_documents(
         ...     end_date="2024-12-31",
         ... )
     """
+    print_status(f"EDINET書類を検索中: {edinet_code}")
     logger.info(
         f"Searching documents for {edinet_code}, "
         f"doc_types={doc_type_codes}, start={start_date}, end={end_date}"
@@ -94,5 +96,8 @@ async def search_documents(
         service = EDINETDocumentService(client)
         documents = await service.search_documents(doc_filter)
 
+    print_success(f"検索完了: {len(documents)}件の書類が見つかりました")
+    if documents:
+        print_info(f"最新の書類: {documents[0].doc_description or documents[0].doc_id}")
     logger.info(f"Found {len(documents)} documents")
     return documents
