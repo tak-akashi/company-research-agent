@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from company_research_agent.core.config import GeminiConfig
 from company_research_agent.core.types import ParseStrategy
 from company_research_agent.parsers.pdf_parser import PDFParser
 from company_research_agent.workflows.nodes.base import AnalysisNode
 from company_research_agent.workflows.state import AnalysisState
+
+if TYPE_CHECKING:
+    from company_research_agent.llm.providers.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -26,39 +28,34 @@ class PDFParseNode(AnalysisNode[str]):
     段階的な解析戦略（pymupdf4llm → yomitoku → gemini）を使用。
 
     Example:
+        # 環境変数で自動設定
         node = PDFParseNode()
         result = await node(state)
-        # result = {"markdown_content": "# Page 1\n...", "completed_nodes": ["pdf_parse"]}
+
+        # 明示的にプロバイダーを指定
+        from company_research_agent.llm import get_vision_provider
+        provider = get_vision_provider()
+        node = PDFParseNode(vision_provider=provider)
     """
 
     def __init__(
         self,
         strategy: ParseStrategy = "auto",
-        gemini_config: GeminiConfig | None = None,
+        vision_provider: BaseLLMProvider | None = None,
     ) -> None:
         """ノードを初期化する.
 
         Args:
             strategy: 解析戦略。"auto"で段階的フォールバック。
-            gemini_config: Gemini API設定。"gemini"戦略使用時に必要。
+            vision_provider: ビジョン用LLMプロバイダー。Noneの場合は環境変数から自動設定。
         """
         self._strategy = strategy
-        self._gemini_config = gemini_config
+        self._vision_provider = vision_provider
 
     @property
     def name(self) -> str:
         """ノード名を返す."""
         return "pdf_parse"
-
-    def _get_gemini_config(self) -> GeminiConfig | None:
-        """Gemini設定を取得する."""
-        if self._gemini_config is None:
-            try:
-                # pydantic-settings reads from environment variables
-                self._gemini_config = GeminiConfig()  # type: ignore[call-arg]
-            except Exception:
-                pass
-        return self._gemini_config
 
     async def execute(self, state: AnalysisState) -> str:
         """PDFをマークダウンに変換する.
@@ -79,8 +76,8 @@ class PDFParseNode(AnalysisNode[str]):
 
         logger.info(f"Parsing PDF: {pdf_path}")
 
-        # PDFパーサーを初期化
-        parser = PDFParser(gemini_config=self._get_gemini_config())
+        # PDFパーサーを初期化（vision_providerを注入）
+        parser = PDFParser(vision_provider=self._vision_provider)
 
         # マークダウンに変換
         result = parser.to_markdown(pdf_path, strategy=self._strategy)

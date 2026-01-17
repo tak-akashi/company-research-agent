@@ -13,7 +13,8 @@ uv sync --dev
 cp .env.example .env
 # .envファイルを編集して以下を設定:
 # - EDINET_API_KEY: EDINET APIキー
-# - GOOGLE_API_KEY: Gemini APIキー（PDF解析で使用、オプション）
+# - LLM_PROVIDER: LLMプロバイダー（google/openai/anthropic/ollama）
+# - 対応するAPIキー（GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY）
 ```
 
 ## EDINET API連携
@@ -194,6 +195,70 @@ result = parser.to_markdown(Path("document.pdf"), strategy="auto")
 
 # 直接Geminiを使用
 result = parser.to_markdown(Path("document.pdf"), strategy="gemini")
+```
+
+## LLMプロバイダー設定
+
+複数のLLMプロバイダーを切り替えて使用できます。
+
+### 対応プロバイダー
+
+| プロバイダー | 環境変数 | デフォルトモデル | ビジョン対応 |
+|-------------|---------|-----------------|-------------|
+| Google | `GOOGLE_API_KEY` | gemini-2.5-flash-preview-05-20 | ✅ |
+| OpenAI | `OPENAI_API_KEY` | gpt-4o | ✅ |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 | ✅ |
+| Ollama | `OLLAMA_BASE_URL` | llama3.2 | ✅（llava等） |
+
+### 設定例
+
+```bash
+# .env ファイル
+
+# プロバイダー選択（google / openai / anthropic / ollama）
+LLM_PROVIDER=google
+
+# モデル指定（オプション、省略時はデフォルト）
+# LLM_MODEL=gemini-2.5-flash-preview-05-20
+
+# ビジョン用プロバイダー（オプション、省略時はLLM_PROVIDERと同じ）
+# LLM_VISION_PROVIDER=google
+# LLM_VISION_MODEL=gemini-2.5-flash-preview-05-20
+
+# APIキー（選択したプロバイダーに応じて設定）
+GOOGLE_API_KEY=your-api-key
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+# OLLAMA_BASE_URL=http://localhost:11434
+```
+
+### 使用例
+
+```python
+from company_research_agent.llm import get_default_provider, create_llm_provider
+from company_research_agent.llm.config import LLMConfig
+from company_research_agent.llm.types import LLMProviderType
+
+# 環境変数から自動設定
+provider = get_default_provider()
+print(f"Provider: {provider.provider_name}, Model: {provider.model_name}")
+
+# 明示的にプロバイダーを指定
+import os
+os.environ["LLM_PROVIDER"] = "anthropic"
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+config = LLMConfig()
+provider = create_llm_provider(config)
+
+# 構造化出力でLLM呼び出し
+from pydantic import BaseModel
+
+class Summary(BaseModel):
+    title: str
+    points: list[str]
+
+result = await provider.ainvoke_structured("要約してください: ...", Summary)
+print(result.title)
 ```
 
 ## MCP Server

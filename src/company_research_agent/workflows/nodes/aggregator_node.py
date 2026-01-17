@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from company_research_agent.core.config import GeminiConfig
 from company_research_agent.schemas.llm_analysis import (
     BusinessSummary,
     ComprehensiveReport,
@@ -19,6 +18,9 @@ from company_research_agent.schemas.llm_analysis import (
 )
 from company_research_agent.workflows.nodes.base import AnalysisNode
 from company_research_agent.workflows.state import AnalysisState
+
+if TYPE_CHECKING:
+    from company_research_agent.llm.providers.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -74,48 +76,40 @@ class AggregatorNode(AnalysisNode[ComprehensiveReport]):
     統合してComprehensiveReportを生成する。
 
     Example:
+        # 環境変数で自動設定
         node = AggregatorNode()
         result = await node(state)
-        # result = {"comprehensive_report": ComprehensiveReport(...), ...}
+
+        # 明示的にプロバイダーを指定
+        from company_research_agent.llm import create_llm_provider
+        provider = create_llm_provider()
+        node = AggregatorNode(llm_provider=provider)
     """
 
     def __init__(
         self,
-        config: GeminiConfig | None = None,
+        llm_provider: BaseLLMProvider | None = None,
     ) -> None:
         """ノードを初期化する.
 
         Args:
-            config: Gemini API設定。Noneの場合は環境変数から読み込む。
+            llm_provider: LLMプロバイダー。Noneの場合は環境変数から自動設定。
         """
-        self._config = config
-        self._model: Any = None
+        self._llm_provider = llm_provider
 
     @property
     def name(self) -> str:
         """ノード名を返す."""
         return "aggregator"
 
-    def _get_config(self) -> GeminiConfig:
-        """設定を取得する."""
-        if self._config is None:
-            # pydantic-settings reads from environment variables
-            self._config = GeminiConfig()  # type: ignore[call-arg]
-        return self._config
+    @property
+    def llm_provider(self) -> Any:
+        """LLMプロバイダーを取得する（遅延初期化）."""
+        if self._llm_provider is None:
+            from company_research_agent.llm.factory import get_default_provider
 
-    def _get_model(self) -> Any:
-        """LLMモデルを取得する."""
-        if self._model is None:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            config = self._get_config()
-            self._model = ChatGoogleGenerativeAI(
-                model=config.model,
-                google_api_key=config.api_key,
-                timeout=config.timeout,
-                max_retries=config.max_retries,
-            )
-        return self._model
+            self._llm_provider = get_default_provider()
+        return self._llm_provider
 
     def _format_analysis(self, analysis: Any, title: str) -> str:
         """分析結果を文字列にフォーマットする."""
@@ -139,7 +133,7 @@ class AggregatorNode(AnalysisNode[ComprehensiveReport]):
 
         Raises:
             ValueError: 必要な分析結果が揃っていない場合
-            GeminiAPIError: LLM呼び出しに失敗した場合
+            LLMProviderError: LLM呼び出しに失敗した場合
         """
         business_summary: BusinessSummary | None = state.get("business_summary")
         risk_analysis: RiskAnalysis | None = state.get("risk_analysis")
@@ -170,9 +164,10 @@ class AggregatorNode(AnalysisNode[ComprehensiveReport]):
             investment_highlights: list[str] = Field(..., description="投資ハイライト")
             concerns: list[str] = Field(..., description="懸念事項")
 
-        model = self._get_model()
-        structured_model = model.with_structured_output(AggregatorOutput)
-        llm_result = await structured_model.ainvoke(prompt)
+        llm_result = await self.llm_provider.ainvoke_structured(
+            prompt=prompt,
+            output_schema=AggregatorOutput,
+        )
 
         # ComprehensiveReportを構築
         # 分析結果がない場合のデフォルト値を設定

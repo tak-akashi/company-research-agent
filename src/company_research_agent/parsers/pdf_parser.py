@@ -11,15 +11,15 @@ import pdfplumber
 import pymupdf4llm  # type: ignore[import-untyped]
 
 from company_research_agent.core.exceptions import (
-    GeminiAPIError,
+    LLMProviderError,
     PDFParseError,
     YomitokuError,
 )
 from company_research_agent.core.types import ParseStrategy
 
 if TYPE_CHECKING:
-    from company_research_agent.clients.gemini_client import GeminiClient
-    from company_research_agent.core.config import GeminiConfig
+    from company_research_agent.clients.vision_client import VisionLLMClient
+    from company_research_agent.llm.providers.base import BaseLLMProvider
 
     PdfPlumberPDF = Any
     PdfPlumberPage = Any
@@ -104,37 +104,29 @@ class PDFParser:
 
     def __init__(
         self,
-        gemini_config: GeminiConfig | None = None,
+        vision_provider: BaseLLMProvider | None = None,
     ) -> None:
         """Initialize the PDF parser.
 
         Args:
-            gemini_config: Configuration for Gemini API client.
-                          Required for "gemini" strategy or "auto" fallback.
+            vision_provider: LLM provider for vision-based extraction.
+                           If None, uses the default vision provider from environment.
+                           Required for "gemini" strategy or "auto" fallback.
         """
-        self._gemini_config = gemini_config
-        self._gemini_client: GeminiClient | None = None
+        self._vision_provider = vision_provider
+        self._vision_client: VisionLLMClient | None = None
 
-    def _get_gemini_client(self) -> GeminiClient:
-        """Get or create the Gemini client.
+    def _get_vision_client(self) -> VisionLLMClient:
+        """Get or create the vision LLM client.
 
         Returns:
-            The GeminiClient instance.
-
-        Raises:
-            PDFParseError: If Gemini config is not provided.
+            The VisionLLMClient instance.
         """
-        if self._gemini_client is None:
-            if self._gemini_config is None:
-                raise PDFParseError(
-                    message="Gemini config is required for gemini strategy",
-                    pdf_path="",
-                    strategy="gemini",
-                )
-            from company_research_agent.clients.gemini_client import GeminiClient
+        if self._vision_client is None:
+            from company_research_agent.clients.vision_client import VisionLLMClient
 
-            self._gemini_client = GeminiClient(self._gemini_config)
-        return self._gemini_client
+            self._vision_client = VisionLLMClient(provider=self._vision_provider)
+        return self._vision_client
 
     def get_info(self, pdf_path: Path) -> PDFInfo:
         """Get PDF metadata and information.
@@ -317,7 +309,7 @@ class PDFParser:
             raise
         except PDFParseError:
             raise
-        except GeminiAPIError:
+        except LLMProviderError:
             raise
         except YomitokuError:
             raise
@@ -383,19 +375,16 @@ class PDFParser:
             logger.warning(f"yomitoku failed for {pdf_path}: {e}")
             errors.append(f"yomitoku: {e}")
 
-        # Try gemini as last resort
-        if self._gemini_config is not None:
-            try:
-                logger.info(f"Trying gemini for {pdf_path}")
-                return self._parse_with_gemini(pdf_path, start_page, end_page)
-            except GeminiAPIError as e:
-                logger.warning(f"gemini failed for {pdf_path}: {e}")
-                errors.append(f"gemini: {e}")
-            except Exception as e:
-                logger.warning(f"gemini failed for {pdf_path}: {e}")
-                errors.append(f"gemini: {e}")
-        else:
-            errors.append("gemini: config not provided")
+        # Try vision LLM as last resort
+        try:
+            logger.info(f"Trying vision LLM for {pdf_path}")
+            return self._parse_with_gemini(pdf_path, start_page, end_page)
+        except LLMProviderError as e:
+            logger.warning(f"Vision LLM failed for {pdf_path}: {e}")
+            errors.append(f"vision: {e}")
+        except Exception as e:
+            logger.warning(f"Vision LLM failed for {pdf_path}: {e}")
+            errors.append(f"vision: {e}")
 
         # All strategies failed
         raise PDFParseError(
@@ -568,7 +557,10 @@ class PDFParser:
         start_page: int | None,
         end_page: int | None,
     ) -> ParsedPDFContent:
-        """Parse PDF using Gemini API for LLM-based extraction.
+        """Parse PDF using vision LLM for LLM-based extraction.
+
+        Note: This method is named 'gemini' for backward compatibility,
+        but now uses the configured vision LLM provider (can be OpenAI, Anthropic, etc.).
 
         Args:
             pdf_path: Path to the PDF file.
@@ -579,10 +571,9 @@ class PDFParser:
             ParsedPDFContent with LLM-extracted text.
 
         Raises:
-            PDFParseError: If Gemini config is not provided.
-            GeminiAPIError: If API call fails.
+            LLMProviderError: If API call fails.
         """
-        client = self._get_gemini_client()
+        client = self._get_vision_client()
 
         # Get total pages
         with pdfplumber.open(pdf_path) as pdf:
@@ -592,7 +583,7 @@ class PDFParser:
         start_idx = (start_page or 1) - 1
         end_idx = end_page or total_pages
 
-        # Extract text using Gemini
+        # Extract text using vision LLM
         md_text = client.extract_pdf_to_markdown(
             pdf_path,
             start_page=start_idx + 1,
@@ -604,10 +595,12 @@ class PDFParser:
         return ParsedPDFContent(
             text=md_text,
             pages=pages_processed,
-            strategy_used="gemini",
+            strategy_used="gemini",  # Keep for backward compatibility
             metadata={
                 "total_pages": total_pages,
                 "start_page": start_idx + 1,
                 "end_page": min(end_idx, total_pages),
+                "provider": client.provider.provider_name,
+                "model": client.provider.model_name,
             },
         )

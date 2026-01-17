@@ -118,6 +118,30 @@ class YomitokuError(CompanyResearchAgentError):
 
 
 @dataclass
+class LLMProviderError(CompanyResearchAgentError):
+    """Raised when LLM provider call fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        provider: The LLM provider name (openai, google, anthropic, ollama).
+        model: The model name that was used.
+    """
+
+    message: str
+    provider: str | None = None
+    model: str | None = None
+
+    def __str__(self) -> str:
+        parts = ["LLM Provider Error"]
+        if self.provider:
+            parts.append(f"[{self.provider}]")
+        if self.model:
+            parts.append(f"({self.model})")
+        parts.append(f": {self.message}")
+        return "".join(parts)
+
+
+@dataclass
 class LLMAnalysisError(CompanyResearchAgentError):
     """Raised when LLM analysis fails.
 

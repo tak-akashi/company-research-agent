@@ -16,6 +16,9 @@ dependencies = [
     "langgraph>=1.0.0",
     "langchain>=1.0.0",
     "langchain-google-genai>=2.1.0",
+    "langchain-openai>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-ollama>=0.2.0",
     "pillow>=11.0.0",
 ]
 
@@ -68,7 +71,14 @@ packages = ["company_research_agent"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["langgraph.*", "langchain.*", "langchain_google_genai.*"]
+module = [
+    "langgraph.*",
+    "langchain.*",
+    "langchain_google_genai.*",
+    "langchain_openai.*",
+    "langchain_anthropic.*",
+    "langchain_ollama.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

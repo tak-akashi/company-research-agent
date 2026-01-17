@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
 from company_research_agent.workflows.state import AnalysisState
 
@@ -140,8 +140,44 @@ class AnalysisNode(ABC, Generic[T]):
 class LLMAnalysisNode(AnalysisNode[T]):
     """LLM呼び出しを行う分析ノードの基底クラス.
 
-    GeminiClientを使用してLLMを呼び出す共通処理を提供する。
+    LLMProviderを使用してLLMを呼び出す共通処理を提供する。
+    プロバイダーは環境変数で切り替え可能（OpenAI, Google, Anthropic, Ollama）。
+
+    Example:
+        class BusinessSummaryNode(LLMAnalysisNode[BusinessSummary]):
+            @property
+            def prompt_template(self) -> str:
+                return BUSINESS_SUMMARY_PROMPT
+
+            @property
+            def output_schema(self) -> type[BusinessSummary]:
+                return BusinessSummary
+
+            async def execute(self, state: AnalysisState) -> BusinessSummary:
+                prompt = self._build_prompt(state)
+                return await self._invoke_llm(prompt)
     """
+
+    def __init__(self, llm_provider: Any = None) -> None:
+        """ノードを初期化する.
+
+        Args:
+            llm_provider: LLMプロバイダー。Noneの場合は環境変数から自動設定。
+        """
+        self._llm_provider = llm_provider
+
+    @property
+    def llm_provider(self) -> Any:
+        """LLMプロバイダーを取得する（遅延初期化）.
+
+        Returns:
+            BaseLLMProviderインスタンス
+        """
+        if self._llm_provider is None:
+            from company_research_agent.llm.factory import get_default_provider
+
+            self._llm_provider = get_default_provider()
+        return self._llm_provider
 
     @property
     @abstractmethod
@@ -177,3 +213,25 @@ class LLMAnalysisNode(AnalysisNode[T]):
         """
         markdown_content = self._get_required_field(state, "markdown_content")
         return self.prompt_template.format(content=markdown_content)
+
+    async def _invoke_llm(self, prompt: str) -> T:
+        """LLMを呼び出して構造化出力を取得する.
+
+        Args:
+            prompt: LLMに送信するプロンプト
+
+        Returns:
+            スキーマに従った構造化出力
+
+        Raises:
+            LLMProviderError: LLM呼び出しに失敗した場合
+        """
+        logger.debug(
+            f"Invoking LLM: provider={self.llm_provider.provider_name}, "
+            f"model={self.llm_provider.model_name}, schema={self.output_schema.__name__}"
+        )
+        result = await self.llm_provider.ainvoke_structured(
+            prompt=prompt,
+            output_schema=self.output_schema,
+        )
+        return cast(T, result)

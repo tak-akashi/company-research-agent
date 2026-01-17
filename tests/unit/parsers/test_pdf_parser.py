@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from company_research_agent.core.exceptions import (
-    GeminiAPIError,
+    LLMProviderError,
     PDFParseError,
     YomitokuError,
 )
@@ -328,11 +328,12 @@ class TestPDFParserGeminiStrategy:
         with patch("pdfplumber.open") as mock_pdfplumber:
             mock_pdfplumber.return_value.__enter__.return_value = mock_pdfplumber_pdf
 
-            parser = PDFParser()  # No gemini_config
+            parser = PDFParser()  # No vision_provider
             with pytest.raises(PDFParseError) as exc_info:
                 parser.to_markdown(mock_pdf_path, strategy="gemini")
 
-        assert "Gemini config is required" in str(exc_info.value)
+        # Should fail due to missing API key
+        assert "GOOGLE_API_KEY" in str(exc_info.value) or "API key" in str(exc_info.value)
 
     def test_to_markdown_gemini_success(
         self,
@@ -340,11 +341,9 @@ class TestPDFParserGeminiStrategy:
         mock_pdfplumber_pdf: MagicMock,
     ) -> None:
         """to_markdown with gemini should work with proper config."""
-        mock_config = MagicMock()
-        mock_config.api_key = "test-api-key"
-        mock_config.model = "gemini-2.5-flash"
-        mock_config.timeout = 120
-        mock_config.rpm_limit = 60
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "google"
+        mock_provider.model_name = "gemini-2.5-flash"
 
         mock_client_instance = MagicMock()
         mock_client_instance.extract_pdf_to_markdown.return_value = "## Page 1\n\nGemini extracted."
@@ -352,9 +351,9 @@ class TestPDFParserGeminiStrategy:
         with patch("pdfplumber.open") as mock_pdfplumber:
             mock_pdfplumber.return_value.__enter__.return_value = mock_pdfplumber_pdf
 
-            parser = PDFParser(gemini_config=mock_config)
+            parser = PDFParser(vision_provider=mock_provider)
             # Directly inject the mock client
-            parser._gemini_client = mock_client_instance
+            parser._vision_client = mock_client_instance
             result = parser.to_markdown(mock_pdf_path, strategy="gemini")
 
         assert isinstance(result, ParsedPDFContent)
@@ -366,26 +365,25 @@ class TestPDFParserGeminiStrategy:
         mock_pdf_path: Path,
         mock_pdfplumber_pdf: MagicMock,
     ) -> None:
-        """to_markdown with gemini should raise GeminiAPIError on API failure."""
-        mock_config = MagicMock()
-        mock_config.api_key = "test-api-key"
-        mock_config.model = "gemini-2.5-flash"
-        mock_config.timeout = 120
-        mock_config.rpm_limit = 60
+        """to_markdown with gemini should raise LLMProviderError on API failure."""
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "google"
+        mock_provider.model_name = "gemini-2.5-flash"
 
         mock_client_instance = MagicMock()
-        mock_client_instance.extract_pdf_to_markdown.side_effect = GeminiAPIError(
+        mock_client_instance.extract_pdf_to_markdown.side_effect = LLMProviderError(
             message="Rate limit exceeded",
+            provider="google",
             model="gemini-2.5-flash",
         )
 
         with patch("pdfplumber.open") as mock_pdfplumber:
             mock_pdfplumber.return_value.__enter__.return_value = mock_pdfplumber_pdf
 
-            parser = PDFParser(gemini_config=mock_config)
+            parser = PDFParser(vision_provider=mock_provider)
             # Directly inject the mock client
-            parser._gemini_client = mock_client_instance
-            with pytest.raises(GeminiAPIError) as exc_info:
+            parser._vision_client = mock_client_instance
+            with pytest.raises(LLMProviderError) as exc_info:
                 parser.to_markdown(mock_pdf_path, strategy="gemini")
 
         assert "Rate limit exceeded" in str(exc_info.value)

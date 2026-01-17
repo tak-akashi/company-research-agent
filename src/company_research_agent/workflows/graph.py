@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from company_research_agent.workflows.state import AnalysisState, create_initial_state
+
+if TYPE_CHECKING:
+    from company_research_agent.llm.providers.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +26,30 @@ class AnalysisGraph:
     各ノードを順次または並列に実行し、分析結果を統合する。
 
     Example:
+        # 環境変数で自動設定
         graph = AnalysisGraph()
+        result = await graph.run_full_analysis(doc_id="S100...")
 
-        # 全ワークフロー実行
+        # 明示的にプロバイダーを指定
+        from company_research_agent.llm import create_llm_provider
+        provider = create_llm_provider()
+        graph = AnalysisGraph(llm_provider=provider)
         result = await graph.run_full_analysis(doc_id="S100...")
 
         # 個別ノード実行（事業要約のみ）
         summary = await graph.run_node("business_summary", doc_id="S100...")
     """
 
-    def __init__(self) -> None:
-        """グラフを初期化する."""
+    def __init__(
+        self,
+        llm_provider: BaseLLMProvider | None = None,
+    ) -> None:
+        """グラフを初期化する.
+
+        Args:
+            llm_provider: LLMプロバイダー。Noneの場合は環境変数から自動設定。
+        """
+        self._llm_provider = llm_provider
         self._full_graph: CompiledStateGraph[Any] | None = None
         self._node_graphs: dict[str, CompiledStateGraph[Any]] = {}
 
@@ -63,14 +79,14 @@ class AnalysisGraph:
 
         graph = StateGraph(AnalysisState)
 
-        # ノードインスタンス作成
+        # ノードインスタンス作成（LLM分析ノードにはllm_providerを注入）
         edinet_node = EDINETNode()
         pdf_parse_node = PDFParseNode()
-        business_summary_node = BusinessSummaryNode()
-        risk_extraction_node = RiskExtractionNode()
-        financial_analysis_node = FinancialAnalysisNode()
-        period_comparison_node = PeriodComparisonNode()
-        aggregator_node = AggregatorNode()
+        business_summary_node = BusinessSummaryNode(llm_provider=self._llm_provider)
+        risk_extraction_node = RiskExtractionNode(llm_provider=self._llm_provider)
+        financial_analysis_node = FinancialAnalysisNode(llm_provider=self._llm_provider)
+        period_comparison_node = PeriodComparisonNode(llm_provider=self._llm_provider)
+        aggregator_node = AggregatorNode(llm_provider=self._llm_provider)
 
         # ノード追加（各ノードは __call__ メソッドで callable）
         graph.add_node("edinet", edinet_node)
@@ -134,7 +150,7 @@ class AnalysisGraph:
         graph.add_node("pdf_parse", pdf_parse_node)
         graph.add_edge("edinet", "pdf_parse")
 
-        # ターゲットノードを追加
+        # ターゲットノードを追加（LLM分析ノードにはllm_providerを注入）
         target_nodes = {
             "business_summary": BusinessSummaryNode,
             "risk_extraction": RiskExtractionNode,
@@ -142,7 +158,7 @@ class AnalysisGraph:
         }
 
         if node_name in target_nodes:
-            target_node = target_nodes[node_name]()
+            target_node = target_nodes[node_name](llm_provider=self._llm_provider)
             graph.add_node(node_name, target_node)  # type: ignore[call-overload]
             graph.add_edge("pdf_parse", node_name)
             graph.add_edge(node_name, END)

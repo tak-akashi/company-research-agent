@@ -28,7 +28,10 @@ graph TB
 
     subgraph "外部サービス"
         EDINET[EDINET API]
-        Gemini[Gemini API]
+        OpenAI[OpenAI API]
+        Google[Google Gemini API]
+        Anthropic[Anthropic API]
+        Ollama[Ollama Local]
         CompanyWeb[企業Webサイト]
     end
 
@@ -43,8 +46,14 @@ graph TB
 
     EDINETDocService --> EDINETClient
     EDINETClient --> EDINET
-    PDFParser --> Gemini
-    LLMAnalyzer --> Gemini
+    PDFParser --> OpenAI
+    PDFParser --> Google
+    PDFParser --> Anthropic
+    PDFParser --> Ollama
+    LLMAnalyzer --> OpenAI
+    LLMAnalyzer --> Google
+    LLMAnalyzer --> Anthropic
+    LLMAnalyzer --> Ollama
 
     EDINETClient --> FileStorage
     XBRLParser --> FileStorage
@@ -416,32 +425,172 @@ class EDINETDocumentServiceProtocol(Protocol):
 
 **実装状態**: ✅ 実装完了 (`src/company_research_agent/services/edinet_document_service.py`)
 
-### GeminiClient（Gemini APIクライアント）
+### LLMProvider（マルチLLMプロバイダー）
 
 **責務**:
-- Gemini APIとの通信
+- 複数LLMプロバイダー（OpenAI, Google, Anthropic, Ollama）の抽象化
+- 構造化出力（Structured Output）のサポート
+- ビジョン機能（PDF解析）のサポート
+- 環境変数によるプロバイダー切り替え
+
+**インターフェース**:
+```python
+from typing import Protocol, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
+
+class LLMProvider(Protocol):
+    """LLMプロバイダーのプロトコル"""
+
+    @property
+    def model_name(self) -> str:
+        """使用中のモデル名を返す"""
+        ...
+
+    @property
+    def provider_name(self) -> str:
+        """プロバイダー名を返す"""
+        ...
+
+    @property
+    def supports_vision(self) -> bool:
+        """ビジョン機能のサポート有無"""
+        ...
+
+    async def ainvoke_structured(
+        self,
+        prompt: str,
+        output_schema: type[T],
+    ) -> T:
+        """構造化出力でLLM呼び出し
+
+        Args:
+            prompt: プロンプト
+            output_schema: 出力スキーマ（Pydantic BaseModel）
+
+        Returns:
+            スキーマに従った構造化出力
+
+        Raises:
+            LLMProviderError: API呼び出しに失敗した場合
+        """
+        ...
+
+    async def ainvoke_vision(
+        self,
+        text_prompt: str,
+        image_data: bytes,
+        mime_type: str = "image/png",
+    ) -> str:
+        """ビジョン入力でLLM呼び出し（PDF解析用）
+
+        Args:
+            text_prompt: テキストプロンプト
+            image_data: 画像データ（バイト列）
+            mime_type: MIMEタイプ
+
+        Returns:
+            LLMの応答テキスト
+
+        Raises:
+            LLMProviderError: API呼び出しに失敗した場合
+        """
+        ...
+```
+
+**設定クラス**:
+```python
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+class LLMConfig(BaseSettings):
+    """LLM統合設定"""
+
+    # テキスト分析用
+    provider: LLMProviderType = Field(default=LLMProviderType.GOOGLE)
+    model: str | None = Field(default=None)
+
+    # ビジョン用（省略時はprovider/modelと同じ）
+    vision_provider: LLMProviderType | None = Field(default=None)
+    vision_model: str | None = Field(default=None)
+
+    # 共通設定
+    timeout: int = Field(default=120)
+    max_retries: int = Field(default=3)
+    rpm_limit: int = Field(default=60)
+
+    # APIキー
+    openai_api_key: str | None = Field(default=None)
+    google_api_key: str | None = Field(default=None)
+    anthropic_api_key: str | None = Field(default=None)
+    ollama_base_url: str = Field(default="http://localhost:11434")
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_",
+        env_file=".env",
+    )
+```
+
+**ファクトリー関数**:
+```python
+from company_research_agent.llm import (
+    create_llm_provider,
+    get_default_provider,
+    get_vision_provider,
+)
+
+# 環境変数から自動設定
+provider = get_default_provider()
+vision_provider = get_vision_provider()
+
+# 明示的な設定
+config = LLMConfig(provider=LLMProviderType.OPENAI, model="gpt-4o")
+provider = create_llm_provider(config)
+```
+
+**対応プロバイダー**:
+| プロバイダー | テキスト用デフォルト | ビジョン用デフォルト |
+|-------------|---------------------|---------------------|
+| OpenAI | gpt-4o | gpt-4o |
+| Google | gemini-2.5-flash-preview-05-20 | 同左 |
+| Anthropic | claude-sonnet-4-20250514 | 同左 |
+| Ollama | llama3.2 | llava |
+
+**依存関係**:
+- `langchain-google-genai`: Google Gemini API連携
+- `langchain-openai`: OpenAI API連携
+- `langchain-anthropic`: Anthropic API連携
+- `langchain-ollama`: Ollama連携
+- `tenacity`: リトライ処理
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/llm/`)
+
+### VisionLLMClient（PDF解析用ビジョンクライアント）
+
+**責務**:
 - PDFからのテキスト抽出（Vision機能を使用）
+- 任意のビジョン対応LLMプロバイダーでのPDF解析
 - レート制限対応とリトライ処理
 
 **インターフェース**:
 ```python
-from dataclasses import dataclass
 from pathlib import Path
 
-@dataclass
-class GeminiConfig:
-    """Gemini API設定"""
-    api_key: str                         # Google API Key
-    model: str = "gemini-2.5-flash-preview-05-20"  # モデル名
-    timeout: int = 120                   # タイムアウト（秒）
-    max_retries: int = 3                 # リトライ回数
-    rpm_limit: int = 60                  # レート制限（RPM）
+class VisionLLMClient:
+    """PDF解析用のビジョンLLMクライアント"""
 
-class GeminiClient:
-    """Gemini APIクライアント"""
+    def __init__(
+        self,
+        provider: LLMProvider | None = None,
+        rpm_limit: int = 60,
+    ) -> None:
+        """クライアントを初期化する
 
-    def __init__(self, config: GeminiConfig) -> None:
-        """クライアントを初期化する"""
+        Args:
+            provider: LLMプロバイダー（省略時はget_vision_provider()を使用）
+            rpm_limit: レート制限（RPM）
+        """
         ...
 
     def extract_pdf_to_markdown(
@@ -461,17 +610,17 @@ class GeminiClient:
             マークダウン形式のテキスト
 
         Raises:
-            GeminiAPIError: API呼び出しに失敗した場合
+            LLMProviderError: API呼び出しに失敗した場合
         """
         ...
 ```
 
 **依存関係**:
-- `langchain-google-genai`: LangChain経由でのGemini API連携
-- `tenacity`: リトライ処理
+- `LLMProvider`: LLMプロバイダー抽象化レイヤー
 - `PyMuPDF (fitz)`: PDF→画像変換
+- `tenacity`: リトライ処理
 
-**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/gemini_client.py`)
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/vision_client.py`)
 
 ### XBRLParser（XBRL解析）
 
@@ -626,7 +775,7 @@ class PDFParserProtocol(Protocol):
 - `pdfplumber`: 基本的なPDF処理（テキスト抽出、シンプルな表）
 - `pymupdf4llm`: マークダウン変換（pymupdf/fitz ベース）
 - `yomitoku`: 日本語OCR（複雑な表、スキャンPDF）
-- `GeminiClient`: Gemini API（最終手段）
+- `VisionLLMClient`: ビジョンLLM（最終手段、マルチプロバイダー対応）
 
 **実装状態**: ✅ 実装完了 (`src/company_research_agent/parsers/pdf_parser.py`)
 
@@ -1191,6 +1340,11 @@ class DatabaseError(EDINETAssistantError):
 - **XBRLParser**: 各財務項目の抽出ロジック、フォールバック処理
 - **FinancialAnalyzer**: 各財務指標の計算ロジック、エッジケース（ゼロ除算等）
 - **EDINETClient**: レスポンスのパース、エラーハンドリング
+- **LLMモジュール**: プロバイダー抽象化レイヤー ✅ 実装済（106テスト）
+  - LLMProviderType enum（8テスト）
+  - LLMConfig設定クラス（22テスト）
+  - ファクトリーメソッド（18テスト）
+  - 各プロバイダー初期化・設定・ビジョン機能（58テスト）
 
 ### 統合テスト
 
@@ -1245,15 +1399,15 @@ graph TD
 
 ### ノード一覧
 
-| ノード名 | 責務 | 入力 | 出力 |
-|---------|------|------|------|
-| `EDINETNode` | EDINET書類取得 | doc_id | pdf_path |
-| `PDFParseNode` | PDF解析・マークダウン化 | pdf_path | markdown_content |
-| `BusinessSummaryNode` | 事業要約・戦略分析 | markdown_content | BusinessSummary |
-| `RiskExtractionNode` | リスク要因抽出・分類 | markdown_content | RiskAnalysis |
-| `FinancialAnalysisNode` | 財務状況・業績分析 | markdown_content | FinancialAnalysis |
-| `PeriodComparisonNode` | 前期との比較分析 | current/prior markdown | PeriodComparison |
-| `AggregatorNode` | 結果統合・レポート生成 | 全分析結果 | ComprehensiveReport |
+| ノード名 | 責務 | 依存 | 入力 | 出力 |
+|---------|------|------|------|------|
+| `EDINETNode` | EDINET書類取得 | EDINETClient | doc_id | pdf_path |
+| `PDFParseNode` | PDF解析・マークダウン化 | PDFParser, VisionLLMClient | pdf_path | markdown_content |
+| `BusinessSummaryNode` | 事業要約・戦略分析 | LLMProvider | markdown_content | BusinessSummary |
+| `RiskExtractionNode` | リスク要因抽出・分類 | LLMProvider | markdown_content | RiskAnalysis |
+| `FinancialAnalysisNode` | 財務状況・業績分析 | LLMProvider | markdown_content | FinancialAnalysis |
+| `PeriodComparisonNode` | 前期との比較分析 | LLMProvider | current/prior markdown | PeriodComparison |
+| `AggregatorNode` | 結果統合・レポート生成 | LLMProvider | 全分析結果 | ComprehensiveReport |
 
 ### State設計
 
@@ -1470,6 +1624,7 @@ def build_analysis_graph() -> StateGraph:
 ```python
 from company_research_agent.workflows import AnalysisGraph
 
+# デフォルトのLLMプロバイダーを使用（環境変数から設定）
 graph = AnalysisGraph()
 
 # 個別ノード実行（事業要約のみ）
@@ -1477,6 +1632,23 @@ summary = await graph.run_node("business_summary", doc_id="S100...")
 
 # 個別ノード実行（リスク抽出のみ）
 risks = await graph.run_node("risk_extraction", doc_id="S100...")
+```
+
+#### プロバイダー指定で実行
+
+```python
+from company_research_agent.llm import get_default_provider, create_llm_provider
+from company_research_agent.llm.config import LLMConfig
+from company_research_agent.llm.types import LLMProviderType
+
+# 環境変数から自動設定
+provider = get_default_provider()
+graph = AnalysisGraph(llm_provider=provider)
+
+# 明示的にプロバイダーを指定
+config = LLMConfig(provider=LLMProviderType.ANTHROPIC, model="claude-sonnet-4-20250514")
+provider = create_llm_provider(config)
+graph = AnalysisGraph(llm_provider=provider)
 ```
 
 #### 全ワークフロー実行
@@ -1500,6 +1672,21 @@ print(result.comprehensive_report)  # 統合レポート
 
 ```
 src/company_research_agent/
+├── llm/                          # LLMプロバイダー抽象化レイヤー ✅ 実装済
+│   ├── __init__.py
+│   ├── types.py                 # LLMProviderType enum
+│   ├── config.py                # LLMConfig設定クラス
+│   ├── provider.py              # LLMProviderプロトコル
+│   ├── factory.py               # create_llm_provider(), get_default_provider()
+│   └── providers/
+│       ├── __init__.py
+│       ├── base.py              # BaseLLMProvider基底クラス
+│       ├── openai.py            # OpenAIProvider
+│       ├── google.py            # GoogleProvider
+│       ├── anthropic.py         # AnthropicProvider
+│       └── ollama.py            # OllamaProvider
+├── clients/
+│   └── vision_client.py         # VisionLLMClient（PDF解析用）✅ 実装済
 ├── workflows/                    # LangGraphワークフロー
 │   ├── __init__.py
 │   ├── state.py                 # AnalysisState定義
@@ -1528,5 +1715,5 @@ src/company_research_agent/
 
 **作成日**: 2026年1月16日
 **更新日**: 2026年1月17日
-**バージョン**: 1.1
-**ステータス**: 実装完了（LangGraphワークフロー）
+**バージョン**: 1.2
+**ステータス**: 実装完了（LLMマルチプロバイダー対応）

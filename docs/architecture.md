@@ -55,6 +55,9 @@
 | LangGraph | 1.0+ | エージェントオーケストレーション | 状態管理、ワークフロー制御、マルチエージェント対応 |
 | LangChain | 1.0+ | LLM基盤フレームワーク | プロンプト管理、チェーン構築、ツール統合 |
 | langchain-google-genai | 2.1+ | Gemini API連携 | LangChain統合、Gemini 2.5 Flash対応 |
+| langchain-openai | 0.3+ | OpenAI API連携 | GPT-4o対応、Structured Output |
+| langchain-anthropic | 0.3+ | Anthropic API連携 | Claude Sonnet/Opus対応 |
+| langchain-ollama | 0.2+ | Ollama連携 | ローカルLLM実行、llama3.2/llava対応 |
 | pgvector | 0.3+ | ベクトル検索 | PostgreSQLネイティブ、LangChain連携 |
 
 ### 開発ツール
@@ -123,7 +126,9 @@
 │   サービスレイヤー                                        │
 │   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
 │   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
-│   ├─ GeminiClient（Gemini API連携）✅ 実装済            │
+│   ├─ LLMProvider（マルチLLM抽象化）✅ 実装済            │
+│   │   ├─ OpenAI / Google / Anthropic / Ollama         │
+│   ├─ VisionLLMClient（PDF解析用ビジョンLLM）✅ 実装済   │
 │   ├─ XBRLParser（XBRL解析）                             │
 │   ├─ PDFParser（PDF解析）✅ 実装済                      │
 │   ├─ FinancialAnalyzer（財務分析）                       │
@@ -318,7 +323,17 @@ data/
   ```bash
   # .env ファイル（.gitignore対象）
   EDINET_API_KEY=xxxxx
-  GEMINI_API_KEY=xxxxx
+
+  # LLMプロバイダー設定
+  LLM_PROVIDER=google  # openai / google / anthropic / ollama
+  LLM_MODEL=gemini-2.5-flash-preview-05-20
+
+  # APIキー（使用するプロバイダーに応じて設定）
+  GOOGLE_API_KEY=xxxxx
+  OPENAI_API_KEY=xxxxx
+  ANTHROPIC_API_KEY=xxxxx
+  OLLAMA_BASE_URL=http://localhost:11434
+
   DATABASE_URL=postgresql://user:pass@localhost/db
 
   # ソースコードにハードコードしない
@@ -462,17 +477,32 @@ LLM分析機能はLangGraphを使用して構造化されたワークフロー�
 | ノード | 責務 | 依存 | 出力型 |
 |-------|------|------|--------|
 | EDINETNode | EDINET書類取得 | EDINETClient | pdf_path |
-| PDFParseNode | PDF→マークダウン変換 | PDFParser | markdown_content |
-| BusinessSummaryNode | 事業要約・戦略分析 | GeminiClient | BusinessSummary |
-| RiskExtractionNode | リスク要因抽出・分類 | GeminiClient | RiskAnalysis |
-| FinancialAnalysisNode | 財務状況・業績分析 | GeminiClient | FinancialAnalysis |
-| PeriodComparisonNode | 前期との比較分析 | GeminiClient | PeriodComparison |
-| AggregatorNode | 結果統合・レポート生成 | GeminiClient | ComprehensiveReport |
+| PDFParseNode | PDF→マークダウン変換 | PDFParser, VisionLLMClient | markdown_content |
+| BusinessSummaryNode | 事業要約・戦略分析 | LLMProvider | BusinessSummary |
+| RiskExtractionNode | リスク要因抽出・分類 | LLMProvider | RiskAnalysis |
+| FinancialAnalysisNode | 財務状況・業績分析 | LLMProvider | FinancialAnalysis |
+| PeriodComparisonNode | 前期との比較分析 | LLMProvider | PeriodComparison |
+| AggregatorNode | 結果統合・レポート生成 | LLMProvider | ComprehensiveReport |
 
 ### ファイル構成
 
 ```
 src/company_research_agent/
+├── llm/                          # LLMプロバイダー抽象化レイヤー ✅ 実装済
+│   ├── __init__.py
+│   ├── types.py                 # LLMProviderType enum
+│   ├── config.py                # LLMConfig設定クラス
+│   ├── provider.py              # LLMProviderプロトコル
+│   ├── factory.py               # create_llm_provider(), get_default_provider()
+│   └── providers/
+│       ├── __init__.py
+│       ├── base.py              # BaseLLMProvider基底クラス
+│       ├── openai.py            # OpenAIProvider
+│       ├── google.py            # GoogleProvider
+│       ├── anthropic.py         # AnthropicProvider
+│       └── ollama.py            # OllamaProvider
+├── clients/
+│   └── vision_client.py         # VisionLLMClient（PDF解析用） ✅ 実装済
 ├── workflows/                    # LangGraphワークフロー
 │   ├── __init__.py
 │   ├── state.py                 # AnalysisState定義
@@ -502,7 +532,8 @@ src/company_research_agent/
 ワークフローモジュールは以下の既存モジュールに依存する:
 
 - `clients/edinet_client.py` - EDINET API通信
-- `clients/gemini_client.py` - Gemini API通信
+- `clients/vision_client.py` - ビジョンLLM通信（PDF解析用）
+- `llm/` - LLMプロバイダー抽象化レイヤー
 - `parsers/pdf_parser.py` - PDF解析
 
 ---
@@ -515,6 +546,11 @@ src/company_research_agent/
   - XBRLParser: 各財務項目の抽出ロジック
   - FinancialAnalyzer: 財務指標の計算ロジック
   - バリデーション: 入力検証ロジック
+  - LLMモジュール: プロバイダー抽象化レイヤー ✅ 実装済（106テスト）
+    - `tests/unit/llm/test_types.py`: LLMProviderType enum（8テスト）
+    - `tests/unit/llm/test_config.py`: LLMConfig設定クラス（22テスト）
+    - `tests/unit/llm/test_factory.py`: ファクトリーメソッド（18テスト）
+    - `tests/unit/llm/test_providers.py`: 各プロバイダー（58テスト）
 - **カバレッジ目標**: 80%以上
 - **モック**: pytest-mockによる外部依存のモック
 
@@ -679,6 +715,9 @@ dependencies = [
     "langgraph>=1.0.0,<2.0.0",
     "langchain>=1.0.0,<2.0.0",
     "langchain-google-genai>=2.1.0,<3.0.0",
+    "langchain-openai>=0.3.0,<1.0.0",
+    "langchain-anthropic>=0.3.0,<1.0.0",
+    "langchain-ollama>=0.2.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -708,6 +747,9 @@ dev = [
 | langgraph | エージェントオーケストレーション | 範囲指定（>=1.0,<2.0） |
 | langchain | LLM基盤フレームワーク | 範囲指定（>=1.0,<2.0） |
 | langchain-google-genai | Gemini API連携 | 範囲指定（>=2.1,<3.0） |
+| langchain-openai | OpenAI API連携 | 範囲指定（>=0.3,<1.0） |
+| langchain-anthropic | Anthropic API連携 | 範囲指定（>=0.3,<1.0） |
+| langchain-ollama | Ollama連携 | 範囲指定（>=0.2,<1.0） |
 | ruff | Linter | 最新許可（>=0.8） |
 | mypy | 型チェック | 最新許可（>=1.14） |
 | pytest | テスト | 最新許可（>=8.0） |
@@ -716,5 +758,5 @@ dev = [
 
 **作成日**: 2026年1月16日
 **更新日**: 2026年1月17日
-**バージョン**: 1.1
-**ステータス**: 実装完了（LangGraph LLM分析ワークフロー）
+**バージョン**: 1.2
+**ステータス**: 実装完了（LLMマルチプロバイダー対応）

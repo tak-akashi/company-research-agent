@@ -299,6 +299,9 @@ db.save(financial_data)
 - [ ] 各分析結果を統合したレポートを生成できる（AggregatorNode）
 - [ ] 各ノードを個別に実行できる（部分実行対応）
 - [ ] 分析ノード（Business, Risk, Financial）を並列実行できる
+- [x] 複数のLLMプロバイダー（OpenAI、Google、Anthropic、Ollama）を切り替えて使用できる
+- [x] 環境変数（LLM_PROVIDER）でプロバイダーを設定できる
+- [x] ビジョン機能（PDF解析用）で別のプロバイダーを指定できる（LLM_VISION_PROVIDER）
 
 **LangGraphワークフロー構成**:
 ```
