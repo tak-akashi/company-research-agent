@@ -12,6 +12,7 @@ graph TB
 
     subgraph "サービスレイヤー"
         EDINETClient[EDINET Client]
+        EDINETDocService[EDINET Document Service]
         XBRLParser[XBRL Parser]
         PDFParser[PDF Parser]
         FinancialAnalyzer[Financial Analyzer]
@@ -31,15 +32,16 @@ graph TB
         CompanyWeb[企業Webサイト]
     end
 
-    Jupyter --> EDINETClient
+    Jupyter --> EDINETDocService
     Jupyter --> XBRLParser
     Jupyter --> PDFParser
     Jupyter --> FinancialAnalyzer
     Streamlit --> API
-    API --> EDINETClient
+    API --> EDINETDocService
     API --> XBRLParser
     API --> FinancialAnalyzer
 
+    EDINETDocService --> EDINETClient
     EDINETClient --> EDINET
     PDFParser --> Gemini
     LLMAnalyzer --> Gemini
@@ -339,48 +341,80 @@ class DocumentMetadata:
 class EDINETClientProtocol(Protocol):
     """EDINET APIクライアントプロトコル"""
 
-    def get_document_list(
+    async def get_document_list(
         self,
-        params: DocumentSearchParams
-    ) -> list[DocumentMetadata]:
-        """書類一覧を取得する"""
+        date: date,
+        include_details: bool = True
+    ) -> DocumentListResponse:
+        """書類一覧を取得する（日付単位）"""
         ...
 
-    def search_documents(
-        self,
-        filter: DocumentFilter
-    ) -> list[DocumentMetadata]:
-        """書類を検索する（複数日付を横断）"""
-        ...
-
-    def download_xbrl(
+    async def download_document(
         self,
         doc_id: str,
-        save_dir: Path
-    ) -> Path:
-        """XBRLファイル（ZIP）をダウンロードする"""
-        ...
-
-    def download_pdf(
-        self,
-        doc_id: str,
+        doc_type: int,
         save_path: Path
     ) -> Path:
-        """PDFファイルをダウンロードする"""
-        ...
+        """書類ファイルをダウンロードする
 
-    def download_csv(
-        self,
-        doc_id: str,
-        save_dir: Path
-    ) -> Path:
-        """CSVファイル（ZIP）をダウンロードする"""
+        Args:
+            doc_id: 書類管理番号
+            doc_type: 1=XBRL(ZIP), 2=PDF, 3=代替書面, 4=英文XBRL, 5=CSV
+            save_path: 保存先パス
+        """
         ...
 ```
 
 **依存関係**:
-- `requests` または `httpx`: HTTP通信
+- `httpx`: HTTP通信（非同期対応）
 - `tenacity`: リトライ処理
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/edinet_client.py`)
+
+### EDINETDocumentService（EDINET書類検索サービス）
+
+**責務**:
+- 複数日付を横断した書類検索
+- 企業コード、企業名、書類種別によるフィルタリング
+- EDINETClientのラッパーとしてビジネスロジックを提供
+
+**インターフェース**:
+```python
+from typing import Protocol
+from dataclasses import dataclass
+from datetime import date
+
+from company_research_agent.schemas.edinet_schemas import DocumentMetadata
+
+@dataclass
+class DocumentFilter:
+    """書類検索フィルタ"""
+    edinet_code: str | None = None       # EDINETコード（完全一致）
+    sec_code: str | None = None          # 証券コード（完全一致）
+    company_name: str | None = None      # 企業名（部分一致）
+    doc_type_codes: list[str] | None = None  # 書類種別コード（OR条件）
+    start_date: date | None = None       # 検索開始日
+    end_date: date | None = None         # 検索終了日
+
+class EDINETDocumentServiceProtocol(Protocol):
+    """EDINET書類検索サービスプロトコル"""
+
+    async def search_documents(
+        self,
+        filter: DocumentFilter
+    ) -> list[DocumentMetadata]:
+        """書類を検索する（複数日付を横断、フィルタ適用）
+
+        指定期間の各日付でEDINET APIを呼び出し、
+        取得した書類をフィルタ条件で絞り込んで返す。
+        """
+        ...
+```
+
+**依存関係**:
+- `EDINETClient`: EDINET API通信
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/services/edinet_document_service.py`)
 
 ### XBRLParser（XBRL解析）
 

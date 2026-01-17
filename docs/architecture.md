@@ -119,7 +119,8 @@
 │   └─ REST API（FastAPI）                                │
 ├─────────────────────────────────────────────────────────┤
 │   サービスレイヤー                                        │
-│   ├─ EDINETClient（EDINET API連携）                     │
+│   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
+│   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
 │   ├─ XBRLParser（XBRL解析）                             │
 │   ├─ PDFParser（PDF解析）                               │
 │   ├─ FinancialAnalyzer（財務分析）                       │
@@ -147,14 +148,15 @@
 ```python
 # OK: サービスレイヤーを呼び出す
 class DocumentAPI:
-    def __init__(self, edinet_client: EDINETClient) -> None:
-        self.edinet_client = edinet_client
+    def __init__(self, document_service: EDINETDocumentService) -> None:
+        self.document_service = document_service
 
     async def search(self, filter: DocumentFilter) -> list[DocumentMetadata]:
-        return await self.edinet_client.search_documents(filter)
+        return await self.document_service.search_documents(filter)
 
-# NG: リポジトリを直接呼び出す
+# NG: クライアントやリポジトリを直接呼び出す
 # async def search(self, filter: DocumentFilter):
+#     return await self.edinet_client.get_document_list(date.today())  # ❌
 #     return await self.document_repository.find_by_filter(filter)  # ❌
 ```
 
