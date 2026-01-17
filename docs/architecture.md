@@ -52,7 +52,9 @@
 
 | 技術 | バージョン | 用途 | 選定理由 |
 |------|-----------|------|----------|
-| google-generativeai | 0.8+ | Gemini API | LLM分析、PDF解析の最終手段 |
+| LangGraph | 1.0+ | エージェントオーケストレーション | 状態管理、ワークフロー制御、マルチエージェント対応 |
+| LangChain | 1.0+ | LLM基盤フレームワーク | プロンプト管理、チェーン構築、ツール統合 |
+| langchain-google-genai | 2.1+ | Gemini API連携 | LangChain統合、Gemini 2.5 Flash対応 |
 | pgvector | 0.3+ | ベクトル検索 | PostgreSQLネイティブ、LangChain連携 |
 
 ### 開発ツール
@@ -121,8 +123,9 @@
 │   サービスレイヤー                                        │
 │   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
 │   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
+│   ├─ GeminiClient（Gemini API連携）✅ 実装済            │
 │   ├─ XBRLParser（XBRL解析）                             │
-│   ├─ PDFParser（PDF解析）                               │
+│   ├─ PDFParser（PDF解析）✅ 実装済                      │
 │   ├─ FinancialAnalyzer（財務分析）                       │
 │   ├─ LLMAnalyzer（LLM分析）                             │
 │   └─ VectorSearchService（ベクトル検索）                 │
@@ -580,8 +583,10 @@ dependencies = [
     "asyncpg>=0.30.0,<1.0.0",
     "pgvector>=0.3.0,<1.0.0",
 
-    # AI/ML（LLM分析、PDF解析の最終手段）
-    "google-generativeai>=0.8.0,<1.0.0",
+    # AI/ML（エージェント、LLM分析、PDF解析の最終手段）
+    "langgraph>=1.0.0,<2.0.0",
+    "langchain>=1.0.0,<2.0.0",
+    "langchain-google-genai>=2.1.0,<3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -608,7 +613,9 @@ dev = [
 | pdfplumber | PDF基本解析 | 範囲指定（>=0.11,<1.0） |
 | pymupdf4llm | PDFマークダウン変換 | 最新許可（>=0.0.17） |
 | yomitoku | 日本語OCR | 範囲指定（>=0.7,<1.0） |
-| google-generativeai | LLM分析 | 範囲指定（>=0.8,<1.0） |
+| langgraph | エージェントオーケストレーション | 範囲指定（>=1.0,<2.0） |
+| langchain | LLM基盤フレームワーク | 範囲指定（>=1.0,<2.0） |
+| langchain-google-genai | Gemini API連携 | 範囲指定（>=2.1,<3.0） |
 | ruff | Linter | 最新許可（>=0.8） |
 | mypy | 型チェック | 最新許可（>=1.14） |
 | pytest | テスト | 最新許可（>=8.0） |

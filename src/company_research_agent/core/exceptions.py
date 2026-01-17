@@ -59,3 +59,59 @@ class EDINETServerError(EDINETAPIError):
     """
 
     pass
+
+
+@dataclass
+class PDFParseError(CompanyResearchAgentError):
+    """Raised when PDF parsing fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        pdf_path: Path to the PDF file that failed to parse.
+        strategy: The parsing strategy that was used when the error occurred.
+    """
+
+    message: str
+    pdf_path: str
+    strategy: str | None = None
+
+    def __str__(self) -> str:
+        if self.strategy:
+            return f"PDF Parse Error [{self.strategy}] for {self.pdf_path}: {self.message}"
+        return f"PDF Parse Error for {self.pdf_path}: {self.message}"
+
+
+@dataclass
+class GeminiAPIError(CompanyResearchAgentError):
+    """Raised when Gemini API call fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        model: The Gemini model that was used.
+    """
+
+    message: str
+    model: str | None = None
+
+    def __str__(self) -> str:
+        if self.model:
+            return f"Gemini API Error [{self.model}]: {self.message}"
+        return f"Gemini API Error: {self.message}"
+
+
+@dataclass
+class YomitokuError(CompanyResearchAgentError):
+    """Raised when Yomitoku OCR fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        pdf_path: Path to the PDF file that failed to process.
+    """
+
+    message: str
+    pdf_path: str | None = None
+
+    def __str__(self) -> str:
+        if self.pdf_path:
+            return f"Yomitoku Error for {self.pdf_path}: {self.message}"
+        return f"Yomitoku Error: {self.message}"

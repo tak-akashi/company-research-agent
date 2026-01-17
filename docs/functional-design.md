@@ -416,6 +416,63 @@ class EDINETDocumentServiceProtocol(Protocol):
 
 **実装状態**: ✅ 実装完了 (`src/company_research_agent/services/edinet_document_service.py`)
 
+### GeminiClient（Gemini APIクライアント）
+
+**責務**:
+- Gemini APIとの通信
+- PDFからのテキスト抽出（Vision機能を使用）
+- レート制限対応とリトライ処理
+
+**インターフェース**:
+```python
+from dataclasses import dataclass
+from pathlib import Path
+
+@dataclass
+class GeminiConfig:
+    """Gemini API設定"""
+    api_key: str                         # Google API Key
+    model: str = "gemini-2.5-flash-preview-05-20"  # モデル名
+    timeout: int = 120                   # タイムアウト（秒）
+    max_retries: int = 3                 # リトライ回数
+    rpm_limit: int = 60                  # レート制限（RPM）
+
+class GeminiClient:
+    """Gemini APIクライアント"""
+
+    def __init__(self, config: GeminiConfig) -> None:
+        """クライアントを初期化する"""
+        ...
+
+    def extract_pdf_to_markdown(
+        self,
+        pdf_path: Path,
+        start_page: int | None = None,
+        end_page: int | None = None,
+    ) -> str:
+        """PDFからテキストを抽出してマークダウン形式で返す
+
+        Args:
+            pdf_path: PDFファイルのパス
+            start_page: 開始ページ（1-based）
+            end_page: 終了ページ（1-based）
+
+        Returns:
+            マークダウン形式のテキスト
+
+        Raises:
+            GeminiAPIError: API呼び出しに失敗した場合
+        """
+        ...
+```
+
+**依存関係**:
+- `langchain-google-genai`: LangChain経由でのGemini API連携
+- `tenacity`: リトライ処理
+- `PyMuPDF (fitz)`: PDF→画像変換
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/gemini_client.py`)
+
 ### XBRLParser（XBRL解析）
 
 **責務**:
@@ -569,7 +626,9 @@ class PDFParserProtocol(Protocol):
 - `pdfplumber`: 基本的なPDF処理（テキスト抽出、シンプルな表）
 - `pymupdf4llm`: マークダウン変換（pymupdf/fitz ベース）
 - `yomitoku`: 日本語OCR（複雑な表、スキャンPDF）
-- `google-generativeai`: Gemini API（最終手段）
+- `GeminiClient`: Gemini API（最終手段）
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/parsers/pdf_parser.py`)
 
 ### FinancialAnalyzer（財務分析）
 

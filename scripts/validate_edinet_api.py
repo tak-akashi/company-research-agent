@@ -3,34 +3,34 @@
 
 使用方法:
     # スクリプト実行（.envファイルからAPIキーを自動読み込み）
-    uv run python scripts/test_edinet_api.py
+    uv run python scripts/validate_edinet_api.py
 
     # 特定の日付を指定
-    uv run python scripts/test_edinet_api.py --date 2024-06-28
+    uv run python scripts/validate_edinet_api.py --date 2024-06-28
 
     # 期間を指定して検索
-    uv run python scripts/test_edinet_api.py --start-date 2024-06-01 --end-date 2024-06-30
+    uv run python scripts/validate_edinet_api.py --start-date 2024-06-01 --end-date 2024-06-30
 
     # 証券コードで検索（トヨタ自動車）
-    uv run python scripts/test_edinet_api.py --sec-code 72030 --start-date 2024-01-01
+    uv run python scripts/validate_edinet_api.py --sec-code 72030 --start-date 2024-01-01
 
     # 会社名で部分一致検索
-    uv run python scripts/test_edinet_api.py --company-name ソニー --start-date 2024-06-01
+    uv run python scripts/validate_edinet_api.py --company-name ソニー --start-date 2024-06-01
 
     # EDINETコードで検索
-    uv run python scripts/test_edinet_api.py --edinet-code E02144 --start-date 2024-01-01
+    uv run python scripts/validate_edinet_api.py --edinet-code E02144 --start-date 2024-01-01
 
     # 書類種別を指定（有価証券報告書のみ）
-    uv run python scripts/test_edinet_api.py --doc-types 120 --start-date 2024-06-01
+    uv run python scripts/validate_edinet_api.py --doc-types 120 --start-date 2024-06-01
 
     # 複数の書類種別を指定（有価証券報告書と四半期報告書）
-    uv run python scripts/test_edinet_api.py --doc-types 120,140 --start-date 2024-06-01
+    uv run python scripts/validate_edinet_api.py --doc-types 120,140 --start-date 2024-06-01
 
     # PDFダウンロードも実行
-    uv run python scripts/test_edinet_api.py --download
+    uv run python scripts/validate_edinet_api.py --download
 
     # 表示件数を指定（0で全件表示、デフォルト: 10）
-    uv run python scripts/test_edinet_api.py --limit 0
+    uv run python scripts/validate_edinet_api.py --limit 0
 
 Note:
     EDINET_API_KEYは以下の順序で読み込まれます：
