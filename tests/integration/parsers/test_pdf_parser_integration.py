@@ -344,9 +344,9 @@ class TestAccuracyValidation:
         has_table = "|" in result.text or "---" in result.text
 
         # Financial PDFs should contain table-like structures
-        assert (
-            has_table or len(result.text) > 1000
-        ), "PDF should contain tables or substantial text content"
+        assert has_table or len(result.text) > 1000, (
+            "PDF should contain tables or substantial text content"
+        )
 
 
 class TestGeminiIntegration:

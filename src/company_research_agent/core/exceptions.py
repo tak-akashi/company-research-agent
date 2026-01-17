@@ -115,3 +115,27 @@ class YomitokuError(CompanyResearchAgentError):
         if self.pdf_path:
             return f"Yomitoku Error for {self.pdf_path}: {self.message}"
         return f"Yomitoku Error: {self.message}"
+
+
+@dataclass
+class LLMAnalysisError(CompanyResearchAgentError):
+    """Raised when LLM analysis fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        node_name: Name of the node where the error occurred.
+        model: The LLM model that was used.
+    """
+
+    message: str
+    node_name: str | None = None
+    model: str | None = None
+
+    def __str__(self) -> str:
+        parts = ["LLM Analysis Error"]
+        if self.node_name:
+            parts.append(f"[{self.node_name}]")
+        if self.model:
+            parts.append(f"({self.model})")
+        parts.append(f": {self.message}")
+        return "".join(parts)

@@ -1206,6 +1206,327 @@ class DatabaseError(EDINETAssistantError):
 
 ---
 
+## LangGraphワークフロー設計
+
+### ワークフロー概要
+
+有価証券報告書のLLM分析機能をLangGraphで構造化し、各分析機能をノードとして実装する。
+並列実行と個別出力・統合レポートの両方に対応する。
+
+### ワークフロー構成図
+
+```mermaid
+graph TD
+    subgraph "入力処理"
+        A[EDINETNode<br/>書類取得]
+        B[PDFParseNode<br/>マークダウン化]
+    end
+
+    subgraph "並列分析"
+        C[BusinessSummaryNode<br/>事業要約]
+        D[RiskExtractionNode<br/>リスク抽出]
+        E[FinancialAnalysisNode<br/>財務分析]
+    end
+
+    subgraph "比較・統合"
+        F[PeriodComparisonNode<br/>前期比較]
+        G[AggregatorNode<br/>結果統合]
+    end
+
+    A --> B
+    B --> C
+    B --> D
+    B --> E
+    C --> F
+    D --> F
+    E --> F
+    F --> G
+```
+
+### ノード一覧
+
+| ノード名 | 責務 | 入力 | 出力 |
+|---------|------|------|------|
+| `EDINETNode` | EDINET書類取得 | doc_id | pdf_path |
+| `PDFParseNode` | PDF解析・マークダウン化 | pdf_path | markdown_content |
+| `BusinessSummaryNode` | 事業要約・戦略分析 | markdown_content | BusinessSummary |
+| `RiskExtractionNode` | リスク要因抽出・分類 | markdown_content | RiskAnalysis |
+| `FinancialAnalysisNode` | 財務状況・業績分析 | markdown_content | FinancialAnalysis |
+| `PeriodComparisonNode` | 前期との比較分析 | current/prior markdown | PeriodComparison |
+| `AggregatorNode` | 結果統合・レポート生成 | 全分析結果 | ComprehensiveReport |
+
+### State設計
+
+```python
+from typing import TypedDict
+from pydantic import BaseModel
+
+class AnalysisState(TypedDict):
+    """LLM分析ワークフローの状態"""
+    # 入力
+    doc_id: str
+    prior_doc_id: str | None
+
+    # 中間結果（PDFパス）
+    pdf_path: str | None
+    prior_pdf_path: str | None
+
+    # 中間結果（マークダウン）
+    markdown_content: str | None
+    prior_markdown_content: str | None
+
+    # 個別出力（各ノードの結果）
+    business_summary: BusinessSummary | None
+    risk_analysis: RiskAnalysis | None
+    financial_analysis: FinancialAnalysis | None
+    period_comparison: PeriodComparison | None
+
+    # 統合出力
+    comprehensive_report: ComprehensiveReport | None
+
+    # メタデータ
+    errors: list[str]
+    completed_nodes: list[str]
+```
+
+### 出力スキーマ
+
+#### BusinessSummary（事業要約）
+
+```python
+class BusinessSummary(BaseModel):
+    """事業要約の出力スキーマ"""
+    company_name: str                    # 企業名
+    fiscal_year: str                     # 対象会計年度
+    business_description: str            # 事業概要
+    main_products_services: list[str]    # 主要製品・サービス
+    business_segments: list[BusinessSegment]  # 事業セグメント
+    competitive_advantages: list[str]    # 競争優位性
+    growth_strategy: str                 # 成長戦略
+    key_initiatives: list[str]           # 重点施策
+```
+
+#### RiskAnalysis（リスク分析）
+
+```python
+class RiskItem(BaseModel):
+    """リスク項目"""
+    category: str                        # リスクカテゴリ（市場、規制、財務等）
+    title: str                           # リスクタイトル
+    description: str                     # リスク説明
+    severity: str                        # 重要度（高/中/低）
+    mitigation: str | None               # 対策
+
+class RiskAnalysis(BaseModel):
+    """リスク分析の出力スキーマ"""
+    risks: list[RiskItem]                # リスク一覧
+    new_risks: list[str]                 # 新規リスク（前期比較時）
+    risk_summary: str                    # リスク総括
+```
+
+#### FinancialAnalysis（財務分析）
+
+```python
+class FinancialHighlight(BaseModel):
+    """財務ハイライト"""
+    metric_name: str                     # 指標名
+    current_value: str                   # 当期値
+    prior_value: str | None              # 前期値
+    change_rate: str | None              # 増減率
+    comment: str                         # コメント
+
+class FinancialAnalysis(BaseModel):
+    """財務分析の出力スキーマ"""
+    revenue_analysis: str                # 売上分析
+    profit_analysis: str                 # 利益分析
+    cash_flow_analysis: str              # キャッシュフロー分析
+    financial_position: str              # 財政状態
+    highlights: list[FinancialHighlight] # ハイライト
+    outlook: str                         # 今後の見通し
+```
+
+#### PeriodComparison（前期比較）
+
+```python
+class ChangePoint(BaseModel):
+    """変化点"""
+    category: str                        # カテゴリ（事業、財務、リスク等）
+    title: str                           # 変化タイトル
+    prior_state: str                     # 前期の状態
+    current_state: str                   # 当期の状態
+    significance: str                    # 重要度（高/中/低）
+    implication: str                     # 示唆
+
+class PeriodComparison(BaseModel):
+    """前期比較の出力スキーマ"""
+    change_points: list[ChangePoint]     # 変化点一覧
+    new_developments: list[str]          # 新規展開事項
+    discontinued_items: list[str]        # 終了・中止事項
+    overall_assessment: str              # 総合評価
+```
+
+#### ComprehensiveReport（統合レポート）
+
+```python
+class ComprehensiveReport(BaseModel):
+    """統合レポートの出力スキーマ"""
+    executive_summary: str               # エグゼクティブサマリー
+    business_summary: BusinessSummary    # 事業要約
+    risk_analysis: RiskAnalysis          # リスク分析
+    financial_analysis: FinancialAnalysis # 財務分析
+    period_comparison: PeriodComparison | None  # 前期比較（オプション）
+    investment_highlights: list[str]     # 投資ハイライト
+    concerns: list[str]                  # 懸念事項
+    generated_at: datetime               # 生成日時
+```
+
+### ノード基底クラス
+
+```python
+from abc import ABC, abstractmethod
+from typing import TypeVar, Generic
+
+T = TypeVar('T')
+
+class AnalysisNode(ABC, Generic[T]):
+    """分析ノードの基底クラス"""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """ノード名を返す"""
+        ...
+
+    @abstractmethod
+    async def execute(self, state: AnalysisState) -> T:
+        """ノードを実行する"""
+        ...
+
+    async def __call__(self, state: AnalysisState) -> dict:
+        """LangGraphから呼び出されるエントリーポイント"""
+        try:
+            result = await self.execute(state)
+            return self._update_state(state, result)
+        except Exception as e:
+            return self._handle_error(state, e)
+
+    @abstractmethod
+    def _update_state(self, state: AnalysisState, result: T) -> dict:
+        """実行結果でStateを更新する"""
+        ...
+
+    def _handle_error(self, state: AnalysisState, error: Exception) -> dict:
+        """エラーハンドリング"""
+        errors = state.get("errors", [])
+        errors.append(f"{self.name}: {str(error)}")
+        return {"errors": errors}
+```
+
+### グラフ構築
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_analysis_graph() -> StateGraph:
+    """分析ワークフローのグラフを構築する"""
+    graph = StateGraph(AnalysisState)
+
+    # ノード追加
+    graph.add_node("edinet", EDINETNode())
+    graph.add_node("pdf_parse", PDFParseNode())
+    graph.add_node("business_summary", BusinessSummaryNode())
+    graph.add_node("risk_extraction", RiskExtractionNode())
+    graph.add_node("financial_analysis", FinancialAnalysisNode())
+    graph.add_node("period_comparison", PeriodComparisonNode())
+    graph.add_node("aggregator", AggregatorNode())
+
+    # エッジ追加（順次処理）
+    graph.add_edge("edinet", "pdf_parse")
+
+    # 並列処理の分岐
+    graph.add_edge("pdf_parse", "business_summary")
+    graph.add_edge("pdf_parse", "risk_extraction")
+    graph.add_edge("pdf_parse", "financial_analysis")
+
+    # 並列処理の合流
+    graph.add_edge("business_summary", "period_comparison")
+    graph.add_edge("risk_extraction", "period_comparison")
+    graph.add_edge("financial_analysis", "period_comparison")
+
+    # 最終処理
+    graph.add_edge("period_comparison", "aggregator")
+    graph.add_edge("aggregator", END)
+
+    # エントリーポイント
+    graph.set_entry_point("edinet")
+
+    return graph.compile()
+```
+
+### 使用例
+
+#### 個別ノード実行
+
+```python
+from company_research_agent.workflows import AnalysisGraph
+
+graph = AnalysisGraph()
+
+# 個別ノード実行（事業要約のみ）
+summary = await graph.run_node("business_summary", doc_id="S100...")
+
+# 個別ノード実行（リスク抽出のみ）
+risks = await graph.run_node("risk_extraction", doc_id="S100...")
+```
+
+#### 全ワークフロー実行
+
+```python
+# 全ワークフロー実行
+result = await graph.run_full_analysis(
+    doc_id="S100...",
+    prior_doc_id="S100..."  # 前期比較用（オプション）
+)
+
+# 個別結果へのアクセス
+print(result.business_summary)
+print(result.risk_analysis)
+print(result.financial_analysis)
+print(result.period_comparison)
+print(result.comprehensive_report)  # 統合レポート
+```
+
+### ファイル構成
+
+```
+src/company_research_agent/
+├── workflows/                    # LangGraphワークフロー
+│   ├── __init__.py
+│   ├── state.py                 # AnalysisState定義
+│   ├── graph.py                 # グラフ構築・実行
+│   └── nodes/                   # 各ノード実装
+│       ├── __init__.py
+│       ├── base.py              # ノード基底クラス
+│       ├── edinet_node.py       # EDINET書類取得
+│       ├── pdf_parse_node.py    # PDF解析
+│       ├── business_summary_node.py   # 事業要約
+│       ├── risk_extraction_node.py    # リスク抽出
+│       ├── financial_analysis_node.py # 財務分析
+│       ├── period_comparison_node.py  # 前期比較
+│       └── aggregator_node.py   # 結果統合
+├── schemas/
+│   └── llm_analysis.py          # 分析結果スキーマ
+└── prompts/                     # プロンプトテンプレート
+    ├── __init__.py
+    ├── business_summary.py
+    ├── risk_extraction.py
+    ├── financial_analysis.py
+    └── period_comparison.py
+```
+
+---
+
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月17日
+**バージョン**: 1.1
+**ステータス**: 実装完了（LangGraphワークフロー）

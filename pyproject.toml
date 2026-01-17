@@ -50,6 +50,9 @@ select = [
     "B",    # flake8-bugbear
     "UP",   # pyupgrade
 ]
+ignore = [
+    "UP046",  # Generic[T] -> type parameter syntax (Python 3.12+)
+]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # load_dotenv() must run before imports
@@ -63,6 +66,10 @@ warn_unused_configs = true
 mypy_path = "src"
 packages = ["company_research_agent"]
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["langgraph.*", "langchain.*", "langchain_google_genai.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

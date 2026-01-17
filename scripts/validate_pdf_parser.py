@@ -24,7 +24,8 @@ PRDの受入条件を検証するためのスクリプトです。
     # 詳細出力
     uv run python scripts/validate_pdf_parser.py /path/to/document.pdf --verbose
 
-    # 結果をファイルに保存
+    # 結果をファイルに保存（デフォルトでoutputs/に出力される）
+    # 出力先を明示的に指定する場合:
     uv run python scripts/validate_pdf_parser.py /path/to/document.pdf --output result.md
 
 検証項目:
@@ -43,6 +44,7 @@ import argparse
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -385,11 +387,21 @@ def main() -> int:
     print()
     print(report)
 
-    # ファイル出力
+    # 出力先の決定（デフォルトはoutputs/ディレクトリ）
     if args.output:
         output_path = Path(args.output)
-        output_path.write_text(report, encoding="utf-8")
-        print(f"\nレポートを保存しました: {output_path}")
+    else:
+        # デフォルト出力先: outputs/validation_<pdfname>_<timestamp>.md
+        outputs_dir = Path(__file__).parent.parent / "outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_stem = pdf_path.stem
+        output_path = outputs_dir / f"validation_{pdf_stem}_{timestamp}.md"
+
+    # ファイル出力
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report, encoding="utf-8")
+    print(f"\nレポートを保存しました: {output_path}")
 
     print("\n=== 検証完了 ===")
 
@@ -528,7 +540,7 @@ PRD検証項目:
         "-o",
         type=str,
         default=None,
-        help="レポート出力先ファイルパス",
+        help="レポート出力先ファイルパス (デフォルト: outputs/validation_<pdf名>_<日時>.md)",
     )
 
     return parser.parse_args()

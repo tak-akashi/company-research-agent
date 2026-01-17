@@ -187,9 +187,9 @@ class TestPDFParserPerformance:
         assert "売上高" in result or "Page" in result, "Result doesn't contain expected content"
 
         # Check timing requirement
-        assert (
-            elapsed < self.MAX_TIME_5_MINUTES
-        ), f"100-page document took {elapsed:.2f}s (max: {self.MAX_TIME_5_MINUTES}s)"
+        assert elapsed < self.MAX_TIME_5_MINUTES, (
+            f"100-page document took {elapsed:.2f}s (max: {self.MAX_TIME_5_MINUTES}s)"
+        )
 
 
 class TestPerformanceMetrics:
@@ -224,9 +224,9 @@ class TestPerformanceMetrics:
 
         # Performance check: should be fast for text extraction
         max_expected = 2.0  # 2 seconds for 20 pages
-        assert (
-            elapsed < max_expected
-        ), f"extract_text too slow: {elapsed:.2f}s (max: {max_expected}s)"
+        assert elapsed < max_expected, (
+            f"extract_text too slow: {elapsed:.2f}s (max: {max_expected}s)"
+        )
 
     def test_get_info_performance(
         self,

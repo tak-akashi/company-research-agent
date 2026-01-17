@@ -127,7 +127,7 @@
 │   ├─ XBRLParser（XBRL解析）                             │
 │   ├─ PDFParser（PDF解析）✅ 実装済                      │
 │   ├─ FinancialAnalyzer（財務分析）                       │
-│   ├─ LLMAnalyzer（LLM分析）                             │
+│   ├─ AnalysisWorkflow（LangGraph LLM分析）✅ 実装済    │
 │   └─ VectorSearchService（ベクトル検索）                 │
 ├─────────────────────────────────────────────────────────┤
 │   リポジトリレイヤー                                      │
@@ -415,6 +415,98 @@ data/
 
 ---
 
+## LangGraph LLM分析ワークフロー
+
+### ワークフロー構成
+
+LLM分析機能はLangGraphを使用して構造化されたワークフローとして実装する。
+各分析機能をノードとして独立させ、並列実行と個別出力の両方に対応する。
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│   LangGraph Analysis Workflow                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌─────────────┐     ┌─────────────┐                               │
+│   │ EDINETNode  │────▶│PDFParseNode │                               │
+│   │ (書類取得)   │     │(マークダウン) │                               │
+│   └─────────────┘     └──────┬──────┘                               │
+│                              │                                      │
+│            ┌─────────────────┼─────────────────┐                    │
+│            │                 │                 │                    │
+│            ▼                 ▼                 ▼                    │
+│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐              │
+│   │ Business    │   │   Risk      │   │ Financial   │              │
+│   │ Summary     │   │ Extraction  │   │ Analysis    │              │
+│   │    Node     │   │    Node     │   │    Node     │  ← 並列実行   │
+│   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘              │
+│          │                 │                 │                      │
+│          └─────────────────┼─────────────────┘                      │
+│                            ▼                                        │
+│                   ┌─────────────┐                                   │
+│                   │  Period     │                                   │
+│                   │ Comparison  │                                   │
+│                   │    Node     │                                   │
+│                   └──────┬──────┘                                   │
+│                          ▼                                          │
+│                   ┌─────────────┐                                   │
+│                   │ Aggregator  │                                   │
+│                   │    Node     │                                   │
+│                   └─────────────┘                                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### ノード構成
+
+| ノード | 責務 | 依存 | 出力型 |
+|-------|------|------|--------|
+| EDINETNode | EDINET書類取得 | EDINETClient | pdf_path |
+| PDFParseNode | PDF→マークダウン変換 | PDFParser | markdown_content |
+| BusinessSummaryNode | 事業要約・戦略分析 | GeminiClient | BusinessSummary |
+| RiskExtractionNode | リスク要因抽出・分類 | GeminiClient | RiskAnalysis |
+| FinancialAnalysisNode | 財務状況・業績分析 | GeminiClient | FinancialAnalysis |
+| PeriodComparisonNode | 前期との比較分析 | GeminiClient | PeriodComparison |
+| AggregatorNode | 結果統合・レポート生成 | GeminiClient | ComprehensiveReport |
+
+### ファイル構成
+
+```
+src/company_research_agent/
+├── workflows/                    # LangGraphワークフロー
+│   ├── __init__.py
+│   ├── state.py                 # AnalysisState定義
+│   ├── graph.py                 # グラフ構築・実行
+│   └── nodes/                   # 各ノード実装
+│       ├── __init__.py
+│       ├── base.py              # ノード基底クラス
+│       ├── edinet_node.py       # EDINET書類取得
+│       ├── pdf_parse_node.py    # PDF解析
+│       ├── business_summary_node.py   # 事業要約
+│       ├── risk_extraction_node.py    # リスク抽出
+│       ├── financial_analysis_node.py # 財務分析
+│       ├── period_comparison_node.py  # 前期比較
+│       └── aggregator_node.py   # 結果統合
+├── schemas/
+│   └── llm_analysis.py          # 分析結果スキーマ
+└── prompts/                     # プロンプトテンプレート
+    ├── __init__.py
+    ├── business_summary.py
+    ├── risk_extraction.py
+    ├── financial_analysis.py
+    └── period_comparison.py
+```
+
+### 依存関係
+
+ワークフローモジュールは以下の既存モジュールに依存する:
+
+- `clients/edinet_client.py` - EDINET API通信
+- `clients/gemini_client.py` - Gemini API通信
+- `parsers/pdf_parser.py` - PDF解析
+
+---
+
 ## テスト戦略
 
 ### ユニットテスト
@@ -623,5 +715,6 @@ dev = [
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月17日
+**バージョン**: 1.1
+**ステータス**: 実装完了（LangGraph LLM分析ワークフロー）
