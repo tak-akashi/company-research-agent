@@ -1,10 +1,7 @@
 # Company Research Agent
 
-AI-powered Corporate Research Agent - 企業情報収集・分析エージェント
-EDINETや企業ホームページを検索してその結果をまとめるエージェントの構築プロジェクト（開発中）
-
-
-
+- AI-powered Corporate Research Agent - 企業情報収集・分析エージェント
+- EDINETや企業ホームページを検索してその結果をまとめるエージェントを開発中
 
 
 ## アーキテクチャ
@@ -14,6 +11,7 @@ EDINETや企業ホームページを検索してその結果をまとめるエ�
 ```
 src/company_research_agent/
 ├── api/           # REST API (FastAPI)
+├── cli/           # CLIツール (cra コマンド)
 ├── clients/       # 外部APIクライアント (EDINET, Gemini)
 ├── parsers/       # XBRL/PDF解析
 ├── services/      # ビジネスロジック
@@ -21,6 +19,7 @@ src/company_research_agent/
 ├── models/        # SQLAlchemyモデル
 ├── schemas/       # Pydanticスキーマ
 ├── llm/           # LLMプロバイダー抽象化
+├── observability/ # オブザーバビリティ (Langfuse統合)
 ├── orchestrator/  # 自然言語検索オーケストレーター
 ├── tools/         # LangChainツール群
 ├── prompts/       # LLMプロンプト
@@ -276,11 +275,13 @@ graph TD
 
 | コンポーネント | ステータス | 説明 |
 |---------------|----------|------|
+| cli/ | ✅ | CLIツール（cra コマンド） |
 | clients/ | ✅ | EDINET/Gemini/Visionクライアント |
 | parsers/ | ✅ | PDF解析（3戦略フォールバック） |
 | services/ | ✅ | ドキュメント検索・キャッシュ |
 | tools/ | ✅ | LangChainツール（6種） |
 | llm/ | ✅ | OpenAI/Google/Anthropic/Ollama対応 |
+| observability/ | ✅ | Langfuse統合（LLMトレース・分析） |
 | workflows/ | ✅ | LangGraph並列分析ワークフロー |
 | orchestrator/ | ✅ | ReActエージェント |
 | schemas/ | ✅ | Pydanticスキーマ |
@@ -303,6 +304,80 @@ cp .env.example .env
 # - LLM_PROVIDER: LLMプロバイダー（google/openai/anthropic/ollama）
 # - 対応するAPIキー（GOOGLE_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY）
 ```
+
+## CLIツール（cra コマンド）
+
+コマンドラインから企業検索・書類ダウンロード・PDF分析ができます。
+
+> **cra** = **C**ompany **R**esearch **A**gent
+
+### 使用方法
+
+```bash
+# 企業検索
+cra search --name "トヨタ"
+cra search --sec-code 72030
+
+# 書類一覧（直近1年の有報・四半期報）
+cra list --sec-code 72030 --doc-types 120,140
+
+# 書類一覧（期間指定）
+cra list --sec-code 72030 --start-date 2023-01-01 --end-date 2024-12-31
+
+# 書類ダウンロード
+cra download --sec-code 72030 --doc-types 120 --limit 3
+
+# 書類ダウンロード（期間指定）
+cra download --sec-code 72030 --start-date 2024-01-01 --end-date 2024-06-30
+
+# PDF→マークダウン変換
+cra markdown --doc-id S100VWVY --output result.md
+
+# 自然言語クエリ
+cra query "トヨタの有報を分析して"
+
+# 対話モード
+cra chat
+
+# キャッシュ管理
+cra cache --stats
+cra cache --list --sec-code 72030
+
+# デバッグモード（詳細ログ表示）
+cra -v list --sec-code 72030
+LOG_LEVEL=DEBUG cra list --sec-code 72030
+```
+
+### グローバルオプション
+
+| オプション | 説明 |
+|-----------|------|
+| `-v, --verbose` | 詳細ログを表示（DEBUGレベル） |
+
+環境変数 `LOG_LEVEL` でもログレベルを制御できます（DEBUG/INFO/WARNING/ERROR）。
+
+### サブコマンド一覧
+
+| コマンド | 説明 |
+|---------|------|
+| `search` | 企業検索（名前/証券コード/EDINETコード） |
+| `list` | 書類一覧（期間・書類種別でフィルタ） |
+| `download` | PDF/XBRLダウンロード |
+| `markdown` | PDF→マークダウン変換 |
+| `query` | 自然言語クエリ実行 |
+| `chat` | 対話モード |
+| `cache` | ダウンロード済み書類の管理 |
+
+### 書類種別コード
+
+| コード | 種別 |
+|--------|------|
+| `120` | 有価証券報告書 |
+| `140` | 四半期報告書 |
+| `160` | 半期報告書 |
+| `180` | 臨時報告書 |
+
+詳細は `cra --help` または `cra <command> --help` で確認できます。
 
 ## EDINET API連携
 
@@ -743,6 +818,11 @@ GOOGLE_API_KEY=your-api-key
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
 # OLLAMA_BASE_URL=http://localhost:11434
+
+# Langfuse（オプション：LLMトレース・分析）
+# LANGFUSE_ENABLED=true
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
 ```
 
 ### 使用例
@@ -773,6 +853,66 @@ class Summary(BaseModel):
 result = await provider.ainvoke_structured("要約してください: ...", Summary)
 print(result.title)
 ```
+
+## Langfuse統合（オブザーバビリティ）
+
+LLM呼び出しのトレース・コスト分析・品質モニタリングのため、Langfuseとの統合をサポートしています。
+
+### セットアップ
+
+1. [Langfuse Cloud](https://cloud.langfuse.com) でアカウントを作成
+2. プロジェクトを作成し、APIキーを取得
+3. 環境変数を設定
+
+```bash
+# .env ファイル
+LANGFUSE_ENABLED=true
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+
+# オプション: セルフホスト環境の場合
+# LANGFUSE_BASE_URL=https://your-langfuse-instance.com
+
+# オプション: デバッグログ有効化
+# LANGFUSE_DEBUG=true
+```
+
+### 機能
+
+Langfuseを有効にすると、以下の処理が自動的にトレースされます：
+
+| コンポーネント | トレース内容 |
+|---------------|-------------|
+| `ainvoke_structured()` | 構造化出力LLM呼び出し |
+| `ainvoke_vision()` | ビジョンLLM呼び出し |
+| `AnalysisGraph.run_full_analysis()` | ワークフロー全体 |
+| `AnalysisGraph.run_node()` | 個別ノード実行 |
+| `QueryOrchestrator.process()` | エージェント実行 |
+
+### 使用例
+
+```python
+import os
+
+# Langfuseを有効化
+os.environ["LANGFUSE_ENABLED"] = "true"
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..."
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..."
+
+from company_research_agent.orchestrator import QueryOrchestrator
+
+# 通常通り使用するだけでトレースが記録される
+orchestrator = QueryOrchestrator()
+result = await orchestrator.process("トヨタの有報を分析して")
+
+# Langfuseダッシュボードでトレースを確認
+# https://cloud.langfuse.com
+```
+
+### 無効化
+
+環境変数を設定しないか、`LANGFUSE_ENABLED=false` を設定すると、Langfuse統合は無効になります。
+既存の動作に影響はありません。
 
 ## MCP Server
 

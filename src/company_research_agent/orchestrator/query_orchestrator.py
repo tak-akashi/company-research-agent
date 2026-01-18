@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
 
+from company_research_agent.core.text_utils import extract_text_from_content
 from company_research_agent.llm.factory import get_default_provider
 from company_research_agent.prompts.orchestrator_system import ORCHESTRATOR_SYSTEM_PROMPT
 from company_research_agent.schemas.query_schemas import (
@@ -101,6 +103,36 @@ class QueryOrchestrator:
             logger.info("QueryOrchestrator agent initialized")
         return self._agent
 
+    def _get_langfuse_config(self, query: str) -> dict[str, Any]:
+        """Langfuse用のconfig設定を取得する.
+
+        Args:
+            query: ユーザークエリ
+
+        Returns:
+            エージェント実行用のconfig辞書
+        """
+        from company_research_agent.observability.handler import (
+            get_langfuse_handler,
+            is_langfuse_enabled,
+        )
+
+        if not is_langfuse_enabled():
+            return {}
+
+        handler = get_langfuse_handler(
+            trace_name="query-orchestrator",
+            tags=["orchestrator", f"provider:{self._llm_provider.provider_name}"],
+            metadata={
+                "query_preview": query[:100] if query else None,
+                "model": self._llm_provider.model_name,
+            },
+        )
+
+        if handler:
+            return {"callbacks": [handler]}
+        return {}
+
     async def process(self, query: str) -> OrchestratorResult:
         """クエリを処理し、結果を返す.
 
@@ -114,11 +146,62 @@ class QueryOrchestrator:
 
         agent = self.get_agent()
 
+        # Langfuse config を取得
+        config = self._get_langfuse_config(query)
+
         # エージェント実行
-        result = await agent.ainvoke({"messages": [("user", query)]})
+        result = await agent.ainvoke(
+            {"messages": [("user", query)]},
+            config=config,  # type: ignore[arg-type]
+        )
 
         # 結果を解析
         return self._parse_result(query, result)
+
+    async def process_with_history(
+        self,
+        query: str,
+        messages: list[Any] | None = None,
+    ) -> tuple[OrchestratorResult, list[Any]]:
+        """会話履歴を保持してクエリを処理する.
+
+        対話モード用のメソッド。過去のメッセージ履歴を受け取り、
+        新しいクエリを追加して処理し、更新された履歴を返す。
+
+        Args:
+            query: ユーザーの自然言語クエリ
+            messages: 過去のメッセージ履歴（初回はNone）
+
+        Returns:
+            (処理結果, 更新されたメッセージ履歴) のタプル
+
+        Example:
+            >>> orchestrator = QueryOrchestrator()
+            >>> result, history = await orchestrator.process_with_history("トヨタの有報を探して")
+            >>> result2, history = await orchestrator.process_with_history("分析して", history)
+            >>> # result2は前の文脈を踏まえた回答
+        """
+        logger.info(f"Processing query with history: {query}")
+
+        if messages is None:
+            messages = []
+
+        # 新しいユーザーメッセージを追加
+        messages.append(("user", query))
+
+        agent = self.get_agent()
+        config = self._get_langfuse_config(query)
+
+        # エージェント実行
+        result = await agent.ainvoke(
+            {"messages": messages},
+            config=config,  # type: ignore[arg-type]
+        )
+
+        # 更新されたメッセージ履歴を取得
+        updated_messages = result.get("messages", [])
+
+        return self._parse_result(query, result), updated_messages
 
     def _parse_result(self, query: str, result: dict[str, Any]) -> OrchestratorResult:
         """エージェント結果を解析してOrchestratorResultに変換する.
@@ -145,11 +228,12 @@ class QueryOrchestrator:
         intent = self._infer_intent(tools_used)
 
         # 最終メッセージを取得
-        final_result: Any = None
+        final_result: str | None = None
         if messages:
             last_msg = messages[-1]
             if hasattr(last_msg, "content"):
-                final_result = last_msg.content
+                extracted = extract_text_from_content(last_msg.content)
+                final_result = extracted if extracted else None
 
         # ドキュメントメタデータを抽出
         documents = self._extract_document_metadata(messages)
@@ -186,7 +270,7 @@ class QueryOrchestrator:
     def _extract_document_metadata(self, messages: list[Any]) -> list[DocumentResultMetadata]:
         """ツールメッセージからドキュメントメタデータを抽出する.
 
-        analyze_documentツールの結果からメタデータを抽出し、
+        analyze_document/search_documentsツールの結果からメタデータを抽出し、
         DocumentResultMetadataのリストとして返す。
 
         Args:
@@ -196,23 +280,109 @@ class QueryOrchestrator:
             抽出されたドキュメントメタデータのリスト
         """
         documents: list[DocumentResultMetadata] = []
+        seen_doc_ids: set[str] = set()  # 重複を防ぐ
 
         for msg in messages:
-            # ToolMessageの場合、contentがdictでmetadataを含む可能性がある
+            msg_type = type(msg).__name__
+
+            # ToolMessageの場合
+            if msg_type == "ToolMessage":
+                # artifact属性をチェック（LangChainではツール結果がartifactに格納されることがある）
+                if hasattr(msg, "artifact") and msg.artifact is not None:
+                    self._extract_from_artifact(msg.artifact, documents, seen_doc_ids)
+
+            # contentをチェック
             if hasattr(msg, "content"):
                 content = msg.content
-                # contentがdictの場合
-                if isinstance(content, dict) and "metadata" in content:
-                    meta = content["metadata"]
-                    if isinstance(meta, dict) and meta.get("doc_id"):
-                        documents.append(
-                            DocumentResultMetadata(
-                                doc_id=meta.get("doc_id", ""),
-                                filer_name=meta.get("filer_name"),
-                                doc_description=meta.get("doc_description"),
-                                period_start=meta.get("period_start"),
-                                period_end=meta.get("period_end"),
-                            )
-                        )
+
+                # contentが文字列の場合、JSONパースを試みる
+                if isinstance(content, str):
+                    try:
+                        content = json.loads(content)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+
+                # contentがリストの場合（search_documentsの結果など）
+                if isinstance(content, list):
+                    self._extract_from_list(content, documents, seen_doc_ids)
+                # contentがdictの場合（analyze_documentの結果など）
+                elif isinstance(content, dict):
+                    self._extract_from_dict(content, documents, seen_doc_ids)
 
         return documents
+
+    def _extract_from_artifact(
+        self,
+        artifact: Any,
+        documents: list[DocumentResultMetadata],
+        seen_doc_ids: set[str],
+    ) -> None:
+        """artifact属性からメタデータを抽出する."""
+        if isinstance(artifact, list):
+            self._extract_from_list(artifact, documents, seen_doc_ids)
+        elif isinstance(artifact, dict):
+            self._extract_from_dict(artifact, documents, seen_doc_ids)
+
+    def _extract_from_list(
+        self,
+        items: list[Any],
+        documents: list[DocumentResultMetadata],
+        seen_doc_ids: set[str],
+    ) -> None:
+        """リストからメタデータを抽出する（search_documentsの結果など）."""
+        for item in items:
+            doc_id = None
+            filer_name = None
+            doc_description = None
+            period_start = None
+            period_end = None
+
+            # Pydanticモデルの場合
+            if hasattr(item, "doc_id"):
+                doc_id = item.doc_id
+                filer_name = getattr(item, "filer_name", None)
+                doc_description = getattr(item, "doc_description", None)
+                period_start = getattr(item, "period_start", None)
+                period_end = getattr(item, "period_end", None)
+            # dictの場合
+            elif isinstance(item, dict):
+                doc_id = item.get("doc_id")
+                filer_name = item.get("filer_name")
+                doc_description = item.get("doc_description")
+                period_start = item.get("period_start")
+                period_end = item.get("period_end")
+
+            if doc_id and doc_id not in seen_doc_ids:
+                seen_doc_ids.add(doc_id)
+                documents.append(
+                    DocumentResultMetadata(
+                        doc_id=doc_id,
+                        filer_name=filer_name,
+                        doc_description=doc_description,
+                        period_start=period_start,
+                        period_end=period_end,
+                    )
+                )
+
+    def _extract_from_dict(
+        self,
+        content: dict[str, Any],
+        documents: list[DocumentResultMetadata],
+        seen_doc_ids: set[str],
+    ) -> None:
+        """dictからメタデータを抽出する（analyze_documentの結果など）."""
+        if "metadata" in content:
+            meta = content["metadata"]
+            if isinstance(meta, dict):
+                doc_id = meta.get("doc_id")
+                if doc_id and doc_id not in seen_doc_ids:
+                    seen_doc_ids.add(doc_id)
+                    documents.append(
+                        DocumentResultMetadata(
+                            doc_id=doc_id,
+                            filer_name=meta.get("filer_name"),
+                            doc_description=meta.get("doc_description"),
+                            period_start=meta.get("period_start"),
+                            period_end=meta.get("period_end"),
+                        )
+                    )

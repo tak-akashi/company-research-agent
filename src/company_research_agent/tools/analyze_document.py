@@ -65,8 +65,15 @@ async def analyze_document(
 
     logger.info("Analysis completed successfully")
 
+    # Pydanticモデルを辞書にシリアライズ（LangChainのToolMessageでJSON化できるように）
+    report_dict = (
+        comprehensive_report.model_dump()
+        if hasattr(comprehensive_report, "model_dump")
+        else comprehensive_report
+    )
+
     return {
-        "report": comprehensive_report,
+        "report": report_dict,
         "metadata": {
             "doc_id": doc_id,
             "filer_name": filer_name,

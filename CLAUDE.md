@@ -27,12 +27,30 @@ AI-powered Corporate Research Agent - 企業情報収集・分析エージェン
 ```
 src/company_research_agent/
 ├── api/           # REST API (FastAPI)
+├── cli/           # CLIツール (cra コマンド)
+│   ├── main.py    # エントリーポイント
+│   ├── commands/  # サブコマンド実装
+│   │   ├── search.py     # 企業検索
+│   │   ├── list.py       # 書類一覧
+│   │   ├── download.py   # ダウンロード
+│   │   ├── markdown.py   # PDF→マークダウン変換
+│   │   ├── query.py      # 自然言語クエリ
+│   │   ├── chat.py       # 対話モード
+│   │   └── cache.py      # キャッシュ管理
+│   ├── config.py  # CLI設定・定数
+│   ├── output.py  # 出力ユーティリティ
+│   └── rich_output.py  # Rich整形出力
 ├── clients/       # 外部APIクライアント (EDINET, Gemini)
+├── llm/           # LLMプロバイダー抽象化レイヤー
+├── observability/ # オブザーバビリティ (Langfuse統合)
+├── orchestrator/  # 自然言語オーケストレーター
 ├── parsers/       # XBRL/PDF解析
 ├── services/      # ビジネスロジック
 ├── repositories/  # データアクセス
 ├── models/        # SQLAlchemyモデル
 ├── schemas/       # Pydanticスキーマ
+├── tools/         # LangChainツール群
+├── workflows/     # LangGraphワークフロー
 └── core/          # 設定、例外、ユーティリティ
 
 tests/
@@ -75,6 +93,31 @@ uv run uvicorn company_research_agent.main:app --reload
 # PostgreSQL起動 (Docker)
 docker compose -f docker/docker-compose.db.yml up -d
 ```
+
+## CLIツール
+
+```bash
+# 基本的な使用例
+cra search --name "トヨタ"
+cra list --sec-code 72030 --doc-types 120,140
+cra download --sec-code 72030 --limit 3
+cra markdown --doc-id S100VWVY
+cra query "トヨタの有報を分析して"
+cra chat
+
+# デバッグモード（-v または LOG_LEVEL で詳細ログ表示）
+cra -v list --sec-code 72030
+LOG_LEVEL=DEBUG cra list --sec-code 72030
+```
+
+### ログレベル
+
+| レベル | 説明 |
+|--------|------|
+| WARNING | デフォルト（静かに動作） |
+| INFO | 基本情報 |
+| DEBUG | 詳細ログ（-v オプションで有効化） |
+| ERROR | エラーのみ |
 
 ## コーディング規約
 

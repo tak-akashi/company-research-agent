@@ -98,8 +98,10 @@ class TestSummarizeDocument:
                     assert result.focus is None
 
     @pytest.mark.asyncio
-    async def test_summarize_document_calls_download(self, sample_summary: Summary) -> None:
-        """summarize_document should call download_document."""
+    async def test_summarize_document_calls_download_without_metadata(
+        self, sample_summary: Summary
+    ) -> None:
+        """summarize_document should call download_document with None metadata."""
         mock_parser = MagicMock()
         mock_parse_result = MagicMock()
         mock_parse_result.text = "# 有価証券報告書\n\n内容..."
@@ -125,7 +127,63 @@ class TestSummarizeDocument:
 
                     await summarize_document.ainvoke({"doc_id": "S100ABCD"})
 
-                    mock_download.ainvoke.assert_called_once_with({"doc_id": "S100ABCD"})
+                    mock_download.ainvoke.assert_called_once_with(
+                        {
+                            "doc_id": "S100ABCD",
+                            "sec_code": None,
+                            "filer_name": None,
+                            "doc_type_code": None,
+                            "period_end": None,
+                        }
+                    )
+
+    @pytest.mark.asyncio
+    async def test_summarize_document_calls_download_with_metadata(
+        self, sample_summary: Summary
+    ) -> None:
+        """summarize_document should pass metadata to download_document."""
+        mock_parser = MagicMock()
+        mock_parse_result = MagicMock()
+        mock_parse_result.text = "# 有価証券報告書\n\n内容..."
+        mock_parser.to_markdown.return_value = mock_parse_result
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke_structured = AsyncMock(return_value=sample_summary)
+
+        with patch(
+            "company_research_agent.tools.summarize_document.download_document"
+        ) as mock_download:
+            mock_download.ainvoke = AsyncMock(return_value="/tmp/test.pdf")
+
+            with patch(
+                "company_research_agent.tools.summarize_document.PDFParser"
+            ) as mock_parser_class:
+                mock_parser_class.return_value = mock_parser
+
+                with patch(
+                    "company_research_agent.tools.summarize_document.get_default_provider"
+                ) as mock_get_provider:
+                    mock_get_provider.return_value = mock_llm
+
+                    await summarize_document.ainvoke(
+                        {
+                            "doc_id": "S100ABCD",
+                            "sec_code": "72030",
+                            "filer_name": "株式会社パワーエックス",
+                            "doc_type_code": "140",
+                            "period_end": "2025-01-15",
+                        }
+                    )
+
+                    mock_download.ainvoke.assert_called_once_with(
+                        {
+                            "doc_id": "S100ABCD",
+                            "sec_code": "72030",
+                            "filer_name": "株式会社パワーエックス",
+                            "doc_type_code": "140",
+                            "period_end": "2025-01-15",
+                        }
+                    )
 
     @pytest.mark.asyncio
     async def test_summarize_document_calls_pdf_parser(self, sample_summary: Summary) -> None:

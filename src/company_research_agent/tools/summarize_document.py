@@ -24,6 +24,10 @@ async def summarize_document(
         str | None,
         "要約の焦点（例: 事業概要、リスク、財務）",
     ] = None,
+    sec_code: Annotated[str | None, "証券コード（5桁）"] = None,
+    filer_name: Annotated[str | None, "企業名"] = None,
+    doc_type_code: Annotated[str | None, "書類種別コード（120=有報等）"] = None,
+    period_end: Annotated[str | None, "決算期末日（YYYY-MM-DD形式）"] = None,
 ) -> Summary:
     """書類を要約する。
 
@@ -33,6 +37,10 @@ async def summarize_document(
     Args:
         doc_id: 書類ID（S100XXXX形式）
         focus: 要約の焦点（省略時は「全体」）
+        sec_code: 証券コード（5桁、例: "72030"）
+        filer_name: 企業名（例: "トヨタ自動車株式会社"）
+        doc_type_code: 書類種別コード（例: "120" = 有価証券報告書）
+        period_end: 決算期末日（YYYY-MM-DD形式）
 
     Returns:
         要約レポート
@@ -41,13 +49,25 @@ async def summarize_document(
         >>> summary = await summarize_document(
         ...     doc_id="S100ABCD",
         ...     focus="事業リスク",
+        ...     sec_code="72030",
+        ...     filer_name="トヨタ自動車株式会社",
+        ...     doc_type_code="120",
+        ...     period_end="2025-03-31",
         ... )
         >>> print(summary.summary_text)
     """
     logger.info(f"Summarizing document: {doc_id}, focus: {focus}")
 
-    # ダウンロード
-    pdf_path_str = await download_document.ainvoke({"doc_id": doc_id})
+    # ダウンロード（メタデータ付き）
+    pdf_path_str = await download_document.ainvoke(
+        {
+            "doc_id": doc_id,
+            "sec_code": sec_code,
+            "filer_name": filer_name,
+            "doc_type_code": doc_type_code,
+            "period_end": period_end,
+        }
+    )
     pdf_path = Path(pdf_path_str)
 
     # マークダウン化

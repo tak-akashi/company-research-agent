@@ -144,18 +144,23 @@ class EDINETDocumentService:
             Filtered list of documents.
         """
         result = documents
+        logger.debug("Before filtering: %d documents", len(documents))
 
         if filter.sec_code is not None:
             result = self._filter_by_sec_code(result, filter.sec_code)
+            logger.debug("After sec_code filter: %d documents", len(result))
 
         if filter.edinet_code is not None:
             result = self._filter_by_edinet_code(result, filter.edinet_code)
+            logger.debug("After edinet_code filter: %d documents", len(result))
 
         if filter.company_name is not None:
             result = self._filter_by_company_name(result, filter.company_name)
+            logger.debug("After company_name filter: %d documents", len(result))
 
         if filter.doc_type_codes is not None:
             result = self._filter_by_doc_type_codes(result, filter.doc_type_codes)
+            logger.debug("After doc_type_codes filter: %d documents", len(result))
 
         return result
 
@@ -225,7 +230,16 @@ class EDINETDocumentService:
         Returns:
             Documents with document type code in the specified list.
         """
-        return [doc for doc in documents if doc.doc_type_code in doc_type_codes]
+        logger.debug("Filter doc_type_codes: %s", doc_type_codes)
+        result = [doc for doc in documents if doc.doc_type_code in doc_type_codes]
+        # Log unmatched documents only when filtered results differ significantly
+        if documents and not result:
+            unmatched_types = {doc.doc_type_code for doc in documents if doc.doc_type_code}
+            logger.debug(
+                "No documents matched. Found doc_type_codes: %s",
+                sorted(unmatched_types),
+            )
+        return result
 
     def _sort_by_date(
         self,

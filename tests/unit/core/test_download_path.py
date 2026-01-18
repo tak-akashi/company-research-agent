@@ -79,8 +79,8 @@ class TestBuildDownloadPath:
             "downloads/72030_トヨタ自動車株式会社/120_有価証券報告書/202503/S100ABCD.pdf"
         )
 
-    def test_partial_metadata(self) -> None:
-        """Partial metadata should use 'unknown' placeholders."""
+    def test_all_none_uses_unclassified_fallback(self) -> None:
+        """All None metadata should use _unclassified fallback path."""
         path = build_download_path(
             base_dir=Path("downloads"),
             sec_code=None,
@@ -89,6 +89,20 @@ class TestBuildDownloadPath:
             period_end=None,
             doc_id="S100EFGH",
         )
+        assert path == Path("downloads/_unclassified/S100EFGH.pdf")
+        assert path.name == "S100EFGH.pdf"
+
+    def test_partial_metadata_uses_unknown(self) -> None:
+        """Partial metadata should use 'unknown' placeholders (not _unclassified)."""
+        path = build_download_path(
+            base_dir=Path("downloads"),
+            sec_code="72030",
+            filer_name=None,
+            doc_type_code=None,
+            period_end=None,
+            doc_id="S100EFGH",
+        )
+        assert "_unclassified" not in str(path)
         assert "unknown" in str(path)
         assert path.name == "S100EFGH.pdf"
 

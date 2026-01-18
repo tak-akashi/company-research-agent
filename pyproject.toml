@@ -22,7 +22,11 @@ dependencies = [
     "pillow>=11.0.0",
     "rapidfuzz>=3.0.0,<4.0.0",
     "rich>=13.0.0",
+    "langfuse>=3.0.0",
 ]
+
+[project.scripts]
+cra = "company_research_agent.cli:main"
 
 [dependency-groups]
 dev = [
@@ -80,6 +84,7 @@ module = [
     "langchain_openai.*",
     "langchain_anthropic.*",
     "langchain_ollama.*",
+    "langfuse.*",
 ]
 ignore_missing_imports = true
 

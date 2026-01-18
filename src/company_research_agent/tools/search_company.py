@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from dataclasses import asdict
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 
 from company_research_agent.clients.edinet_code_list_client import EDINETCodeListClient
 from company_research_agent.core.progress import print_info, print_status, print_success
-from company_research_agent.schemas.query_schemas import CompanyCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def search_company(
     query: Annotated[str, "検索クエリ（企業名、EDINETコード、証券コード）"],
     limit: Annotated[int, "返却する候補の最大数"] = 10,
-) -> list[CompanyCandidate]:
+) -> list[dict[str, Any]]:
     """企業名で検索し、類似度スコア付き候補リストを返す。
 
     企業名、カナ名、英語名であいまい検索を行い、類似度スコアが高い順に
@@ -48,4 +48,6 @@ async def search_company(
         top = candidates[0]
         print_info(f"最有力候補: {top.company.company_name} (類似度: {top.similarity_score:.1f}%)")
     logger.info(f"Found {len(candidates)} candidates")
-    return candidates
+
+    # dataclassを辞書にシリアライズ（LangChainのToolMessageでJSON化できるように）
+    return [asdict(c) for c in candidates]

@@ -1134,6 +1134,15 @@ LOG_LEVEL=INFO
 DATA_DIR=./data
 DOWNLOAD_DIR=./data/downloads
 CACHE_DIR=./data/cache
+
+# =============================================================================
+# Langfuse (LLM Observability) - Optional
+# =============================================================================
+# LANGFUSE_ENABLED=true
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
+# LANGFUSE_BASE_URL=https://cloud.langfuse.com
+# LANGFUSE_DEBUG=false
 ```
 
 ### 推奨開発ツール
