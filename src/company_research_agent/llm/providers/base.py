@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from company_research_agent.core.exceptions import LLMProviderError
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     from company_research_agent.llm.config import LLMConfig
 
 logger = logging.getLogger(__name__)
@@ -82,16 +84,51 @@ class BaseLLMProvider(ABC):
             logger.info(f"Created {self.provider_name} model: {self.model_name}")
         return self._model
 
+    def _get_callbacks(
+        self,
+        callbacks: list[BaseCallbackHandler] | None = None,
+    ) -> list[Any]:
+        """コールバックリストを構築する.
+
+        明示的なcallbacksが渡されない場合、Langfuseハンドラーを自動取得する。
+
+        Args:
+            callbacks: 明示的なコールバックリスト
+
+        Returns:
+            使用するコールバックのリスト
+        """
+        if callbacks is not None:
+            return list(callbacks)
+
+        from company_research_agent.observability.handler import (
+            create_trace_handler,
+            is_langfuse_enabled,
+        )
+
+        if is_langfuse_enabled():
+            handler = create_trace_handler(
+                operation="llm-call",
+                provider=self.provider_name,
+                model=self.model_name,
+            )
+            if handler:
+                return [handler]
+
+        return []
+
     async def ainvoke_structured(
         self,
         prompt: str,
         output_schema: type[T],
+        callbacks: list[BaseCallbackHandler] | None = None,
     ) -> T:
         """構造化出力でLLMを非同期呼び出しする.
 
         Args:
             prompt: LLMに送信するプロンプト
             output_schema: 出力のPydanticスキーマクラス
+            callbacks: コールバックハンドラーリスト（オプション）
 
         Returns:
             スキーマに従った構造化出力
@@ -102,7 +139,11 @@ class BaseLLMProvider(ABC):
         try:
             model = self.get_model()
             structured_model = model.with_structured_output(output_schema)
-            result: T = await structured_model.ainvoke(prompt)
+
+            effective_callbacks = self._get_callbacks(callbacks)
+            config = {"callbacks": effective_callbacks} if effective_callbacks else {}
+
+            result: T = await structured_model.ainvoke(prompt, config=config)
             logger.debug(f"{self.provider_name} structured output: {type(result).__name__}")
             return result
         except Exception as e:
@@ -118,6 +159,7 @@ class BaseLLMProvider(ABC):
         text_prompt: str,
         image_data: bytes,
         mime_type: str = "image/png",
+        callbacks: list[BaseCallbackHandler] | None = None,
     ) -> str:
         """ビジョン入力でLLMを非同期呼び出しする.
 
@@ -125,6 +167,7 @@ class BaseLLMProvider(ABC):
             text_prompt: テキストプロンプト
             image_data: 画像のバイナリデータ
             mime_type: 画像のMIMEタイプ
+            callbacks: コールバックハンドラーリスト（オプション）
 
         Returns:
             LLMからの応答テキスト
@@ -158,7 +201,10 @@ class BaseLLMProvider(ABC):
                 ]
             )
 
-            response = await model.ainvoke([message])
+            effective_callbacks = self._get_callbacks(callbacks)
+            config = {"callbacks": effective_callbacks} if effective_callbacks else {}
+
+            response = await model.ainvoke([message], config=config)
             result = str(response.content).strip()
             logger.debug(f"{self.provider_name} vision output: {len(result)} chars")
             return result

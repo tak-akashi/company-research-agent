@@ -308,6 +308,48 @@ class TestExtractDocumentMetadata:
 
             assert documents == []
 
+    def test_extract_metadata_from_json_string(self) -> None:
+        """Should extract metadata from JSON string content."""
+        import json
+
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.content = json.dumps(
+                {
+                    "report": {"key": "value"},
+                    "metadata": {
+                        "doc_id": "S100JSON",
+                        "filer_name": "JSONテスト株式会社",
+                        "doc_description": "有価証券報告書－第10期",
+                        "period_start": "2024-01-01",
+                        "period_end": "2024-12-31",
+                    },
+                }
+            )
+
+            documents = orchestrator._extract_document_metadata([mock_msg])
+
+            assert len(documents) == 1
+            assert documents[0].doc_id == "S100JSON"
+            assert documents[0].filer_name == "JSONテスト株式会社"
+            assert documents[0].doc_description == "有価証券報告書－第10期"
+            assert documents[0].period_start == "2024-01-01"
+            assert documents[0].period_end == "2024-12-31"
+
+    def test_extract_metadata_skips_invalid_json_string(self) -> None:
+        """Should skip messages with invalid JSON string."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.content = "これは有効なJSONではありません"
+
+            documents = orchestrator._extract_document_metadata([mock_msg])
+
+            assert documents == []
+
 
 class TestProcess:
     """Tests for process method."""
@@ -338,3 +380,245 @@ class TestProcess:
 
                 mock_agent.ainvoke.assert_called_once()
                 assert result.query == "トヨタの有報を探して"
+
+
+class TestProcessWithHistory:
+    """Tests for process_with_history method."""
+
+    @pytest.mark.asyncio
+    async def test_process_with_history_initial_call(self) -> None:
+        """Should handle initial call with empty history."""
+        with patch(
+            "company_research_agent.orchestrator.query_orchestrator.get_default_provider"
+        ) as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_model = MagicMock()
+            mock_provider.get_model.return_value = mock_model
+            mock_get_provider.return_value = mock_provider
+
+            with patch(
+                "company_research_agent.orchestrator.query_orchestrator.create_react_agent"
+            ) as mock_create_agent:
+                mock_agent = AsyncMock()
+                mock_msg = MagicMock()
+                mock_msg.tool_calls = None
+                mock_msg.content = "トヨタの有報を見つけました"
+                mock_agent.ainvoke = AsyncMock(
+                    return_value={"messages": [("user", "トヨタの有報を探して"), mock_msg]}
+                )
+                mock_create_agent.return_value = mock_agent
+
+                orchestrator = QueryOrchestrator()
+                result, messages = await orchestrator.process_with_history("トヨタの有報を探して")
+
+                assert result.query == "トヨタの有報を探して"
+                assert len(messages) == 2
+
+    @pytest.mark.asyncio
+    async def test_process_with_history_subsequent_call(self) -> None:
+        """Should include previous history in subsequent calls."""
+        with patch(
+            "company_research_agent.orchestrator.query_orchestrator.get_default_provider"
+        ) as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_model = MagicMock()
+            mock_provider.get_model.return_value = mock_model
+            mock_get_provider.return_value = mock_provider
+
+            with patch(
+                "company_research_agent.orchestrator.query_orchestrator.create_react_agent"
+            ) as mock_create_agent:
+                mock_agent = AsyncMock()
+                mock_msg1 = MagicMock()
+                mock_msg1.tool_calls = None
+                mock_msg1.content = "トヨタの有報を見つけました"
+                mock_msg2 = MagicMock()
+                mock_msg2.tool_calls = None
+                mock_msg2.content = "分析結果です"
+
+                # First call returns initial messages
+                first_messages = [("user", "トヨタの有報を探して"), mock_msg1]
+                # Second call includes previous messages plus new
+                second_messages = first_messages + [("user", "分析して"), mock_msg2]
+
+                mock_agent.ainvoke = AsyncMock(
+                    side_effect=[
+                        {"messages": first_messages},
+                        {"messages": second_messages},
+                    ]
+                )
+                mock_create_agent.return_value = mock_agent
+
+                orchestrator = QueryOrchestrator()
+
+                # First call
+                result1, history1 = await orchestrator.process_with_history("トヨタの有報を探して")
+                assert result1.query == "トヨタの有報を探して"
+
+                # Second call with history
+                result2, history2 = await orchestrator.process_with_history("分析して", history1)
+                assert result2.query == "分析して"
+
+                # Verify agent was called with history
+                calls = mock_agent.ainvoke.call_args_list
+                assert len(calls) == 2
+
+    @pytest.mark.asyncio
+    async def test_process_with_history_returns_updated_messages(self) -> None:
+        """Should return updated message list."""
+        with patch(
+            "company_research_agent.orchestrator.query_orchestrator.get_default_provider"
+        ) as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_model = MagicMock()
+            mock_provider.get_model.return_value = mock_model
+            mock_get_provider.return_value = mock_provider
+
+            with patch(
+                "company_research_agent.orchestrator.query_orchestrator.create_react_agent"
+            ) as mock_create_agent:
+                mock_agent = AsyncMock()
+                expected_messages = [
+                    ("user", "テストクエリ"),
+                    MagicMock(content="回答", tool_calls=None),
+                ]
+                mock_agent.ainvoke = AsyncMock(return_value={"messages": expected_messages})
+                mock_create_agent.return_value = mock_agent
+
+                orchestrator = QueryOrchestrator()
+                result, messages = await orchestrator.process_with_history("テストクエリ")
+
+                assert messages == expected_messages
+
+    @pytest.mark.asyncio
+    async def test_process_with_history_none_messages(self) -> None:
+        """Should handle None messages parameter."""
+        with patch(
+            "company_research_agent.orchestrator.query_orchestrator.get_default_provider"
+        ) as mock_get_provider:
+            mock_provider = MagicMock()
+            mock_model = MagicMock()
+            mock_provider.get_model.return_value = mock_model
+            mock_get_provider.return_value = mock_provider
+
+            with patch(
+                "company_research_agent.orchestrator.query_orchestrator.create_react_agent"
+            ) as mock_create_agent:
+                mock_agent = AsyncMock()
+                mock_msg = MagicMock()
+                mock_msg.tool_calls = None
+                mock_msg.content = "結果"
+                mock_agent.ainvoke = AsyncMock(return_value={"messages": [mock_msg]})
+                mock_create_agent.return_value = mock_agent
+
+                orchestrator = QueryOrchestrator()
+                result, messages = await orchestrator.process_with_history("クエリ", None)
+
+                assert result.query == "クエリ"
+
+
+class TestParseResultMultimodalContent:
+    """Tests for _parse_result handling multimodal content."""
+
+    def test_parse_result_extracts_text_from_list_content(self) -> None:
+        """Should extract text from list-formatted content (multimodal)."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            # Mock message with list-formatted content (Gemini style)
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = [{"type": "text", "text": "これはマルチモーダル形式の回答です"}]
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result == "これはマルチモーダル形式の回答です"
+
+    def test_parse_result_extracts_text_from_multiple_blocks(self) -> None:
+        """Should extract and join text from multiple blocks."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = [
+                {"type": "text", "text": "1行目の回答"},
+                {"type": "text", "text": "2行目の回答"},
+            ]
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result == "1行目の回答\n2行目の回答"
+
+    def test_parse_result_ignores_non_text_blocks(self) -> None:
+        """Should ignore non-text blocks like tool_use."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = [
+                {"type": "text", "text": "テキスト部分"},
+                {"type": "tool_use", "id": "toolu_01", "name": "search_company"},
+            ]
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result == "テキスト部分"
+
+    def test_parse_result_handles_string_content(self) -> None:
+        """Should handle regular string content."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = "通常の文字列回答です"
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result == "通常の文字列回答です"
+
+    def test_parse_result_handles_none_content(self) -> None:
+        """Should handle None content."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = None
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result is None
+
+    def test_parse_result_handles_empty_list_content(self) -> None:
+        """Should handle empty list content."""
+        with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
+            orchestrator = QueryOrchestrator()
+
+            mock_msg = MagicMock()
+            mock_msg.tool_calls = None
+            mock_msg.content = []
+
+            result = orchestrator._parse_result(
+                "テストクエリ",
+                {"messages": [mock_msg]},
+            )
+
+            assert result.result is None

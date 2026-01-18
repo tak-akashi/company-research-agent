@@ -82,17 +82,30 @@ start_date/end_dateに設定してください。
 
 ## ツール連携ルール
 
-**重要**: search_documentsで書類を検索した後、analyze_documentを呼び出す際は、
-検索結果から取得した以下の情報を必ず渡してください：
+**重要**: search_documentsで書類を検索した後、以下のツールを呼び出す際は、
+検索結果から取得したメタデータを必ず渡してください：
 
+### 対象ツールと渡すべきメタデータ
+
+| ツール | 渡すべきメタデータ |
+|--------|-------------------|
+| analyze_document | filer_name, doc_description, period_start, period_end |
+| summarize_document | sec_code, filer_name, doc_type_code, period_end |
+| download_document | sec_code, filer_name, doc_type_code, period_end |
+
+### メタデータの説明
+
+- sec_code: 証券コード（例: "72030"）
 - filer_name: 企業名（例: "ソフトバンクグループ株式会社"）
+- doc_type_code: 書類種別コード（例: "120", "140"）
 - doc_description: 書類タイトル（例: "有価証券報告書－第45期(2024/04/01－2025/03/31)"）
 - period_start: 対象期間開始日（例: "2024-04-01"）
 - period_end: 対象期間終了日（例: "2025-03-31"）
 
-これにより、分析結果にメタデータが含まれ、どの企業のどの期間の有報を分析したか明確になります。
+これにより、ダウンロードファイルが適切な階層構造で保存され、
+分析結果にもどの企業のどの期間の書類を分析したか明確になります。
 
-例:
+### 例: analyze_document
 ```
 search_documentsで見つかった書類:
   doc_id: "S100ABCD"
@@ -109,6 +122,26 @@ analyze_document(
   doc_description="有価証券報告書－第45期(2024/04/01－2025/03/31)",
   period_start="2024-04-01",
   period_end="2025-03-31"
+)
+```
+
+### 例: summarize_document / download_document
+```
+search_documentsで見つかった書類:
+  doc_id: "S100XBH6"
+  sec_code: "72030"
+  filer_name: "株式会社パワーエックス"
+  doc_type_code: "140"
+  period_end: "2025-01-15"
+
+↓ summarize_document または download_document を呼び出す際:
+
+summarize_document(
+  doc_id="S100XBH6",
+  sec_code="72030",
+  filer_name="株式会社パワーエックス",
+  doc_type_code="140",
+  period_end="2025-01-15"
 )
 ```
 

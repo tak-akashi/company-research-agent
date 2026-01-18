@@ -7,6 +7,7 @@ company-research-agent/
 ├── src/
 │   └── company_research_agent/         # メインパッケージ
 │       ├── api/                  # REST API (FastAPI)
+│       ├── cli/                  # CLIモジュール（craコマンド）
 │       ├── clients/              # 外部APIクライアント
 │       ├── parsers/              # 解析処理
 │       ├── services/             # ビジネスロジック
@@ -36,6 +37,44 @@ company-research-agent/
 ## ディレクトリ詳細
 
 ### src/company_research_agent/ (メインパッケージ)
+
+#### cli/
+
+**役割**: コマンドラインインターフェース（`cra` コマンド）
+
+**配置ファイル**:
+- `main.py`: argparse設定・エントリーポイント
+- `config.py`: CLI固有設定（定数、パス）
+- `output.py`: 出力ユーティリティ（色付き出力、テーブル表示）
+- `rich_output.py`: Rich整形出力ユーティリティ
+- `commands/`: サブコマンド実装
+
+**命名規則**:
+- コマンドファイル: `{コマンド名}.py`
+- コマンド関数: `cmd_{コマンド名}(args: argparse.Namespace) -> int`
+
+**依存関係**:
+- 依存可能: services/, clients/, parsers/, schemas/, core/, orchestrator/
+- 依存禁止: api/（CLIとAPIは同じレイヤー）
+
+**例**:
+```
+cli/
+├── __init__.py              # mainエクスポート
+├── main.py                  # argparse・エントリーポイント
+├── config.py                # CLI設定（DOC_TYPE_NAMES等）
+├── output.py                # 出力ユーティリティ
+├── rich_output.py           # Rich整形出力
+└── commands/
+    ├── __init__.py
+    ├── search.py            # 企業検索コマンド
+    ├── list.py              # 書類一覧コマンド
+    ├── download.py          # ダウンロードコマンド
+    ├── markdown.py          # PDF→マークダウン変換コマンド
+    ├── query.py             # 自然言語クエリコマンド
+    ├── chat.py              # 対話モードコマンド
+    └── cache.py             # キャッシュ管理コマンド
+```
 
 #### api/
 
@@ -289,9 +328,18 @@ tests/unit/
 ├── conftest.py                  # 共通フィクスチャ
 ├── clients/
 │   └── test_edinet_client.py    # ✅ 実装済
+├── cli/
+│   ├── test_main.py             # ✅ 実装済 (パーサーテスト)
+│   ├── test_config.py           # ✅ 実装済
+│   ├── test_output.py           # ✅ 実装済
+│   ├── test_rich_output.py      # ✅ 実装済
+│   └── commands/
+│       └── test_markdown.py     # ✅ 実装済 (実装テスト)
 ├── core/
 │   ├── test_config.py           # ✅ 実装済
 │   └── test_exceptions.py       # ✅ 実装済
+├── orchestrator/
+│   └── test_query_orchestrator.py  # ✅ 実装済
 ├── schemas/
 │   └── test_edinet_schemas.py   # ✅ 実装済
 ├── services/
@@ -467,6 +515,7 @@ data/
 
 | ファイル種別 | 配置先 | 命名規則 | 例 |
 |------------|--------|---------|-----|
+| CLIコマンド | cli/commands/ | `{コマンド名}.py` | `search.py` |
 | APIルーター | api/routers/ | `{リソース}_router.py` | `documents_router.py` |
 | 外部クライアント | clients/ | `{サービス}_client.py` | `edinet_client.py` |
 | パーサー | parsers/ | `{形式}_parser.py` | `xbrl_parser.py` |
@@ -542,7 +591,7 @@ company-research-agent/
 
 ```
 ┌─────────────────┐
-│     api/        │ ← UIレイヤー
+│   api/ / cli/   │ ← UIレイヤー
 ├─────────────────┤
          ↓ (OK)
 ├─────────────────┤
@@ -564,15 +613,17 @@ company-research-agent/
 
 **許可される依存**:
 - `api/` → `services/`, `schemas/`
+- `cli/` → `services/`, `clients/`, `parsers/`, `schemas/`, `core/`
 - `services/` → `repositories/`, `clients/`, `parsers/`, `models/`, `core/`
 - `repositories/` → `models/`, `core/`
 - `clients/` → `models/`, `core/`
 - `parsers/` → `models/`, `core/`
 
 **禁止される依存**:
-- `repositories/` → `services/`, `api/`（❌）
+- `repositories/` → `services/`, `api/`, `cli/`（❌）
 - `models/` → 他のすべてのディレクトリ（❌）
-- `services/` → `api/`（❌）
+- `services/` → `api/`, `cli/`（❌）
+- `api/` ↔ `cli/`（❌ 相互依存禁止）
 - 循環依存（❌）
 
 ### 循環依存の回避
@@ -748,5 +799,6 @@ coverage.xml
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
+**更新日**: 2026年1月18日
+**バージョン**: 1.1
 **ステータス**: ドラフト

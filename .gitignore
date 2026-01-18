@@ -14,6 +14,13 @@ downloads/*
 downloads/pdfs/*
 !downloads/pdfs/.gitkeep
 
+# Data files (keep directory structure)
+data/*
+data/cache/*
+data/temp/*
+data/downloads/*
+!data/.gitkeep
+
 # Output files (keep directory structure)
 outputs/*
 !outputs/.gitkeep

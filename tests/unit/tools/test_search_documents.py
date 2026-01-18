@@ -78,7 +78,8 @@ class TestSearchDocuments:
                     )
 
                     assert len(result) == 1
-                    assert result[0].doc_id == "S100TEST"
+                    # Result is serialized as dict for LangChain ToolMessage compatibility
+                    assert result[0]["doc_id"] == "S100TEST"
                     mock_service.search_documents.assert_called_once()
 
     @pytest.mark.asyncio

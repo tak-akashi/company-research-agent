@@ -85,6 +85,9 @@ def build_download_path(
     Creates path in format:
     {base_dir}/{sec_code}_{filer_name}/{doc_type_code}_{doc_type_name}/{YYYYMM}/{doc_id}.pdf
 
+    If all metadata is None, uses a simplified fallback path:
+    {base_dir}/_unclassified/{doc_id}.pdf
+
     Args:
         base_dir: Base download directory. Defaults to "downloads".
         sec_code: Securities code (e.g., "72030").
@@ -107,9 +110,24 @@ def build_download_path(
         ... )
         >>> str(path)
         'downloads/72030_トヨタ自動車株式会社/120_有価証券報告書/202503/S100ABCD.pdf'
+
+        >>> path = build_download_path(
+        ...     base_dir=Path("downloads"),
+        ...     sec_code=None,
+        ...     filer_name=None,
+        ...     doc_type_code=None,
+        ...     period_end=None,
+        ...     doc_id="S100EFGH",
+        ... )
+        >>> str(path)
+        'downloads/_unclassified/S100EFGH.pdf'
     """
     if base_dir is None:
         base_dir = DEFAULT_DOWNLOAD_DIR
+
+    # Fallback: if all metadata is None, use simplified path
+    if all(v is None for v in [sec_code, filer_name, doc_type_code, period_end]):
+        return base_dir / "_unclassified" / f"{doc_id}.pdf"
 
     # Build company folder name: {sec_code}_{filer_name}
     sec_code_safe = sec_code or "unknown"

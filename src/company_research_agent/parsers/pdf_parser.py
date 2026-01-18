@@ -8,14 +8,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pdfplumber
-import pymupdf4llm  # type: ignore[import-untyped]
 
-from company_research_agent.core.exceptions import (
+# Suppress pymupdf recommendation messages before importing pymupdf4llm
+logging.getLogger("pymupdf").setLevel(logging.ERROR)
+import pymupdf4llm  # type: ignore[import-untyped]  # noqa: E402
+
+from company_research_agent.core.exceptions import (  # noqa: E402
     LLMProviderError,
     PDFParseError,
     YomitokuError,
 )
-from company_research_agent.core.types import ParseStrategy
+from company_research_agent.core.types import ParseStrategy  # noqa: E402
 
 if TYPE_CHECKING:
     from company_research_agent.clients.vision_client import VisionLLMClient

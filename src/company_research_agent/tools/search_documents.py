@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
 
@@ -12,7 +12,6 @@ from company_research_agent.clients.edinet_client import EDINETClient
 from company_research_agent.core.config import EDINETConfig
 from company_research_agent.core.progress import print_info, print_status, print_success
 from company_research_agent.schemas.document_filter import DocumentFilter, SearchOrder
-from company_research_agent.schemas.edinet_schemas import DocumentMetadata
 from company_research_agent.services.edinet_document_service import EDINETDocumentService
 
 logger = logging.getLogger(__name__)
@@ -60,7 +59,7 @@ async def search_documents(
         int | None,
         "取得する書類の最大数（指定すると早期終了する）",
     ] = None,
-) -> list[DocumentMetadata]:
+) -> list[dict[str, Any]]:
     """EDINET書類を検索する。
 
     指定された企業のEDINETコードに基づいて書類を検索し、
@@ -120,4 +119,6 @@ async def search_documents(
     if documents:
         print_info(f"最新の書類: {documents[0].doc_description or documents[0].doc_id}")
     logger.info(f"Found {len(documents)} documents")
-    return documents
+
+    # Pydanticモデルを辞書にシリアライズ（LangChainのToolMessageでJSON化できるように）
+    return [doc.model_dump() for doc in documents]

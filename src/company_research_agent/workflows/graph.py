@@ -197,6 +197,39 @@ class AnalysisGraph:
             self._node_graphs[node_name] = self._build_node_graph(node_name)
         return self._node_graphs[node_name]
 
+    def _get_langfuse_config(
+        self,
+        doc_id: str,
+        operation: str = "analysis",
+    ) -> dict[str, Any]:
+        """Langfuse用のconfig設定を取得する.
+
+        Args:
+            doc_id: EDINET書類ID
+            operation: 操作名
+
+        Returns:
+            LangGraph実行用のconfig辞書
+        """
+        from company_research_agent.observability.handler import (
+            create_trace_handler,
+            is_langfuse_enabled,
+        )
+
+        if not is_langfuse_enabled():
+            return {}
+
+        handler = create_trace_handler(
+            operation=operation,
+            doc_id=doc_id,
+            provider=self._llm_provider.provider_name if self._llm_provider else None,
+            model=self._llm_provider.model_name if self._llm_provider else None,
+        )
+
+        if handler:
+            return {"callbacks": [handler]}
+        return {}
+
     async def run_full_analysis(
         self,
         doc_id: str,
@@ -215,7 +248,8 @@ class AnalysisGraph:
         graph = self.get_full_graph()
         initial_state = create_initial_state(doc_id, prior_doc_id)
 
-        result = await graph.ainvoke(initial_state)
+        config = self._get_langfuse_config(doc_id, operation="full-analysis")
+        result = await graph.ainvoke(initial_state, config=config)  # type: ignore[arg-type]
 
         if result.get("errors"):
             logger.warning(f"Analysis completed with errors: {result['errors']}")
@@ -244,7 +278,8 @@ class AnalysisGraph:
         graph = self.get_node_graph(node_name)
         initial_state = create_initial_state(doc_id, prior_doc_id)
 
-        result = await graph.ainvoke(initial_state)
+        config = self._get_langfuse_config(doc_id, operation=f"node-{node_name}")
+        result = await graph.ainvoke(initial_state, config=config)  # type: ignore[arg-type]
 
         if result.get("errors"):
             logger.warning(f"Node execution completed with errors: {result['errors']}")

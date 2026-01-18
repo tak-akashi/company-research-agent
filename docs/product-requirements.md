@@ -477,6 +477,38 @@ TDnetのAPIは有料（月額数十万円）のため、優先度を下げて将
 - データベース接続情報の暗号化
 - 機密情報のログ出力禁止
 
+### オブザーバビリティ
+
+#### 9. Langfuse統合
+
+**ユーザーストーリー**:
+開発者として、LLM呼び出しのコスト・品質・パフォーマンスを分析するために、Langfuseとの統合機能が欲しい
+
+**受け入れ条件**:
+- [x] LANGFUSE_ENABLED による有効/無効の切り替えができる
+- [x] LANGFUSE_PUBLIC_KEY/SECRET_KEY で認証情報を設定できる
+- [x] LANGFUSE_BASE_URL でエンドポイントをカスタマイズできる（デフォルト: cloud.langfuse.com）
+- [x] LANGFUSE_DEBUG でデバッグモードを有効化できる
+- [x] ainvoke_structured() でLangfuseトレースが自動的に記録される
+- [x] ainvoke_vision() でLangfuseトレースが自動的に記録される
+- [x] Langfuse無効時は既存の動作に影響しない（後方互換性）
+- [x] AnalysisGraph.run_full_analysis() でトレースが記録される
+- [x] AnalysisGraph.run_node() でトレースが記録される
+- [x] QueryOrchestrator.process() でトレースが記録される
+- [x] 設定クラスのユニットテストが存在する
+- [x] ハンドラー管理のユニットテストが存在する
+
+**検証方法**:
+| 検証項目 | テストデータ | 合格基準 |
+|---------|------------|---------|
+| 有効/無効切り替え | LANGFUSE_ENABLED=true/false | 環境変数で切り替え可能 |
+| 認証設定 | PUBLIC_KEY/SECRET_KEY | 両方設定時のみis_configured()がTrue |
+| LLM呼び出し | ainvoke_structured/vision | Langfuseダッシュボードでトレース確認 |
+| ワークフロー | run_full_analysis | 全ノードのスパンが記録される |
+| 後方互換性 | LANGFUSE_ENABLED=false | 既存テストが全てパス |
+
+**優先度**: P1(重要)
+
 ### スケーラビリティ
 - 対象企業数: 数百社（特定セクターや指数構成銘柄）を想定
 - 過去10年分のデータ保持（EDINET保持期間に対応）

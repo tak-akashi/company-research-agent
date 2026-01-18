@@ -119,6 +119,7 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │   UIレイヤー                                             │
+│   ├─ CLI（cra コマンド）✅ 実装済                        │
 │   ├─ Jupyter Notebook（Python API直接利用）              │
 │   ├─ Streamlit（簡易Web UI）                            │
 │   └─ REST API（FastAPI）                                │
@@ -156,6 +157,22 @@
 - **責務**: ユーザー入力の受付、バリデーション、結果の表示
 - **許可される操作**: サービスレイヤーの呼び出し
 - **禁止される操作**: リポジトリ・データレイヤーへの直接アクセス
+
+**CLI (`cra` コマンド)** ✅ 実装済:
+- 企業検索（search）: 企業名・証券コード・EDINETコードで検索
+- 書類一覧（list）: 有価証券報告書・四半期報告書の一覧取得
+- ダウンロード（download）: PDF/XBRL形式でダウンロード
+- PDF分析（analyze）: マークダウン変換・情報抽出
+- キャッシュ管理（cache）: ダウンロード済みファイルの管理
+
+```bash
+# 使用例
+uv run cra search --name "トヨタ"
+uv run cra list --sec-code 72030 --doc-types 120,140
+uv run cra download --sec-code 72030 --limit 3
+uv run cra analyze --doc-id S100XXXX
+uv run cra cache --stats
+```
 
 ```python
 # OK: サービスレイヤーを呼び出す
@@ -583,6 +600,72 @@ src/company_research_agent/
 - `clients/vision_client.py` - ビジョンLLM通信（PDF解析用）
 - `llm/` - LLMプロバイダー抽象化レイヤー
 - `parsers/pdf_parser.py` - PDF解析
+
+---
+
+## オブザーバビリティ
+
+### Langfuse統合
+
+LLM呼び出しのトレース・分析のため、Langfuseとの統合機能を提供する。
+
+**アーキテクチャ**:
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│   Observability Layer                                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌─────────────────┐     ┌─────────────────┐                       │
+│   │ LangfuseConfig  │────▶│ CallbackHandler │                       │
+│   │ (環境変数管理)   │     │    (トレース)    │                       │
+│   └─────────────────┘     └────────┬────────┘                       │
+│                                    │                                │
+│            ┌───────────────────────┼───────────────────────┐        │
+│            │                       │                       │        │
+│            ▼                       ▼                       ▼        │
+│   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐  │
+│   │ BaseLLMProvider │   │  AnalysisGraph  │   │QueryOrchestrator│  │
+│   │  (LLM呼び出し)   │   │  (ワークフロー)  │   │   (エージェント)  │  │
+│   └─────────────────┘   └─────────────────┘   └─────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**モジュール構成**:
+
+| ファイル | 責務 |
+|---------|------|
+| `observability/__init__.py` | モジュール公開API |
+| `observability/config.py` | LangfuseConfig設定クラス（pydantic_settings） |
+| `observability/handler.py` | CallbackHandler管理（取得・キャッシュ） |
+
+**環境変数**:
+```bash
+LANGFUSE_ENABLED=true/false    # 有効/無効切り替え
+LANGFUSE_PUBLIC_KEY=pk-lf-... # 公開キー
+LANGFUSE_SECRET_KEY=sk-lf-... # 秘密キー
+LANGFUSE_BASE_URL=https://cloud.langfuse.com  # エンドポイント（オプション）
+LANGFUSE_DEBUG=false          # デバッグモード（オプション）
+```
+
+**統合ポイント**:
+
+1. **LLMプロバイダー層** (`llm/providers/base.py`)
+   - `_get_callbacks()` でLangfuseハンドラーを自動取得
+   - `ainvoke_structured()` / `ainvoke_vision()` でcallbacks引数をサポート
+
+2. **ワークフロー層** (`workflows/graph.py`)
+   - `_get_langfuse_config()` でconfig辞書を生成
+   - `run_full_analysis()` / `run_node()` でトレースを記録
+
+3. **オーケストレーター層** (`orchestrator/query_orchestrator.py`)
+   - `_get_langfuse_config()` でconfig辞書を生成
+   - `process()` でエージェント実行時にトレースを記録
+
+**設計方針**:
+- Langfuse無効時は既存動作と完全に同一（後方互換性）
+- `@lru_cache` で設定読み込みをキャッシュ（パフォーマンス）
+- 例外発生時はNoneを返し、処理を継続（フォールトトレラント）
 
 ---
 
