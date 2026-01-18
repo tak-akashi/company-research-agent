@@ -12,6 +12,7 @@ graph TB
 
     subgraph "サービスレイヤー"
         EDINETClient[EDINET Client]
+        EDINETDocService[EDINET Document Service]
         XBRLParser[XBRL Parser]
         PDFParser[PDF Parser]
         FinancialAnalyzer[Financial Analyzer]
@@ -27,22 +28,32 @@ graph TB
 
     subgraph "外部サービス"
         EDINET[EDINET API]
-        Gemini[Gemini API]
+        OpenAI[OpenAI API]
+        Google[Google Gemini API]
+        Anthropic[Anthropic API]
+        Ollama[Ollama Local]
         CompanyWeb[企業Webサイト]
     end
 
-    Jupyter --> EDINETClient
+    Jupyter --> EDINETDocService
     Jupyter --> XBRLParser
     Jupyter --> PDFParser
     Jupyter --> FinancialAnalyzer
     Streamlit --> API
-    API --> EDINETClient
+    API --> EDINETDocService
     API --> XBRLParser
     API --> FinancialAnalyzer
 
+    EDINETDocService --> EDINETClient
     EDINETClient --> EDINET
-    PDFParser --> Gemini
-    LLMAnalyzer --> Gemini
+    PDFParser --> OpenAI
+    PDFParser --> Google
+    PDFParser --> Anthropic
+    PDFParser --> Ollama
+    LLMAnalyzer --> OpenAI
+    LLMAnalyzer --> Google
+    LLMAnalyzer --> Anthropic
+    LLMAnalyzer --> Ollama
 
     EDINETClient --> FileStorage
     XBRLParser --> FileStorage
@@ -339,48 +350,380 @@ class DocumentMetadata:
 class EDINETClientProtocol(Protocol):
     """EDINET APIクライアントプロトコル"""
 
-    def get_document_list(
+    async def get_document_list(
         self,
-        params: DocumentSearchParams
-    ) -> list[DocumentMetadata]:
-        """書類一覧を取得する"""
+        date: date,
+        include_details: bool = True
+    ) -> DocumentListResponse:
+        """書類一覧を取得する（日付単位）"""
         ...
 
-    def search_documents(
-        self,
-        filter: DocumentFilter
-    ) -> list[DocumentMetadata]:
-        """書類を検索する（複数日付を横断）"""
-        ...
-
-    def download_xbrl(
+    async def download_document(
         self,
         doc_id: str,
-        save_dir: Path
-    ) -> Path:
-        """XBRLファイル（ZIP）をダウンロードする"""
-        ...
-
-    def download_pdf(
-        self,
-        doc_id: str,
+        doc_type: int,
         save_path: Path
     ) -> Path:
-        """PDFファイルをダウンロードする"""
-        ...
+        """書類ファイルをダウンロードする
 
-    def download_csv(
-        self,
-        doc_id: str,
-        save_dir: Path
-    ) -> Path:
-        """CSVファイル（ZIP）をダウンロードする"""
+        Args:
+            doc_id: 書類管理番号
+            doc_type: 1=XBRL(ZIP), 2=PDF, 3=代替書面, 4=英文XBRL, 5=CSV
+            save_path: 保存先パス
+        """
         ...
 ```
 
 **依存関係**:
-- `requests` または `httpx`: HTTP通信
+- `httpx`: HTTP通信（非同期対応）
 - `tenacity`: リトライ処理
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/edinet_client.py`)
+
+### EDINETDocumentService（EDINET書類検索サービス）
+
+**責務**:
+- 複数日付を横断した書類検索
+- 企業コード、企業名、書類種別によるフィルタリング
+- EDINETClientのラッパーとしてビジネスロジックを提供
+
+**インターフェース**:
+```python
+from typing import Protocol
+from dataclasses import dataclass
+from datetime import date
+from enum import Enum
+
+from company_research_agent.schemas.edinet_schemas import DocumentMetadata
+
+class SearchOrder(str, Enum):
+    """検索順序"""
+    NEWEST_FIRST = "newest_first"  # 今日から過去へ（デフォルト）
+    OLDEST_FIRST = "oldest_first"  # 過去から今日へ
+
+@dataclass
+class DocumentFilter:
+    """書類検索フィルタ"""
+    edinet_code: str | None = None       # EDINETコード（完全一致）
+    sec_code: str | None = None          # 証券コード（完全一致）
+    company_name: str | None = None      # 企業名（部分一致）
+    doc_type_codes: list[str] | None = None  # 書類種別コード（OR条件）
+    start_date: date | None = None       # 検索開始日
+    end_date: date | None = None         # 検索終了日
+    search_order: SearchOrder = SearchOrder.NEWEST_FIRST  # 検索順序
+    max_documents: int | None = None     # 取得する書類の最大数（早期終了用）
+
+class EDINETDocumentServiceProtocol(Protocol):
+    """EDINET書類検索サービスプロトコル"""
+
+    async def search_documents(
+        self,
+        filter: DocumentFilter
+    ) -> list[DocumentMetadata]:
+        """書類を検索する（複数日付を横断、フィルタ適用）
+
+        指定期間の各日付でEDINET APIを呼び出し、
+        取得した書類をフィルタ条件で絞り込んで返す。
+
+        検索順序:
+        - NEWEST_FIRST（デフォルト）: end_dateからstart_dateへ遡って検索
+        - OLDEST_FIRST: start_dateからend_dateへ向かって検索
+
+        早期終了:
+        - max_documentsが指定された場合、その件数に達した時点で検索を終了
+        - 「最新の有報を1件取得」のような用途に有効
+
+        結果のソート:
+        - 結果は常にsubmit_date_timeの降順（最新順）でソートされる
+        """
+        ...
+```
+
+**依存関係**:
+- `EDINETClient`: EDINET API通信
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/services/edinet_document_service.py`)
+
+### QueryOrchestrator（自然言語クエリ処理）
+
+**責務**:
+- ユーザーの自然言語クエリを解釈し、適切なツールを呼び出す
+- 期間表現（「過去1年間」「過去半年」など）を具体的な日付範囲に変換
+- 検索順序（最新/最古）の自動判定
+- ReActエージェントとしてのツール実行制御
+
+**期間表現の解釈**:
+
+システムプロンプトにより、以下の自然言語期間表現を具体的な日付（YYYY-MM-DD形式）に変換:
+
+| ユーザーの表現 | start_date | end_date |
+|---------------|------------|----------|
+| 「過去1年間」「直近1年」 | 1年前の日付 | 今日 |
+| 「過去半年」「直近6ヶ月」 | 6ヶ月前の日付 | 今日 |
+| 「過去3年」「直近3年間」 | 3年前の日付 | 今日 |
+| 「過去5年」 | 5年前の日付 | 今日 |
+| 「2024年1月以降」 | 2024-01-01 | 今日 |
+| 「2023年度」 | 2023-04-01 | 2024-03-31 |
+| 「今年」 | 今年の1月1日 | 今日 |
+| 「去年」「昨年」 | 去年の1月1日 | 去年の12月31日 |
+| 期間指定なし | 省略（デフォルト5年） | 省略 |
+
+**使用例**:
+```
+ユーザー: 「ソニーの過去1年間のすべてのドキュメントを検索して」
+→ search_documents(edinet_code="E01777", start_date="2025-01-18", end_date="2026-01-18")
+
+ユーザー: 「トヨタの2024年1月以降の有報を探して」
+→ search_documents(edinet_code="E02144", doc_type_codes=["120"], start_date="2024-01-01", end_date="2026-01-18")
+```
+
+**依存関係**:
+- `LLMProvider`: LLMモデル呼び出し
+- `search_documents`, `search_company` 等のLangChainツール
+
+**出力スキーマ**:
+```python
+class DocumentResultMetadata(BaseModel):
+    """分析対象書類のメタデータ"""
+    doc_id: str                          # 書類ID（S100XXXX形式）
+    filer_name: str | None               # 企業名
+    doc_description: str | None          # 書類タイトル
+    period_start: str | None             # 対象期間開始日（YYYY-MM-DD）
+    period_end: str | None               # 対象期間終了日（YYYY-MM-DD）
+
+class OrchestratorResult(BaseModel):
+    """オーケストレーター結果"""
+    query: str                           # 元のクエリ
+    intent: str                          # 判定された意図（検索/分析/比較/要約）
+    result: Any                          # 処理結果
+    tools_used: list[str]                # 使用したツール
+    documents: list[DocumentResultMetadata]  # 分析対象書類のメタデータ
+```
+
+**メタデータ連携**:
+
+`search_documents` で取得した書類メタデータを `analyze_document` に渡すことで、
+分析結果にメタデータが含まれる。これにより、どの企業のどの期間の有報を分析したか明確になる。
+
+```python
+# analyze_document のメタデータパラメータ
+await analyze_document(
+    doc_id="S100XXXX",
+    filer_name="ソフトバンクグループ株式会社",
+    doc_description="有価証券報告書－第45期(2024/04/01－2025/03/31)",
+    period_start="2024-04-01",
+    period_end="2025-03-31",
+)
+
+# 結果
+result.documents
+# → [DocumentResultMetadata(
+#     doc_id="S100XXXX",
+#     filer_name="ソフトバンクグループ株式会社",
+#     doc_description="有価証券報告書－第45期(2024/04/01－2025/03/31)",
+#     period_start="2024-04-01",
+#     period_end="2025-03-31"
+# )]
+```
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/orchestrator/query_orchestrator.py`, `src/company_research_agent/prompts/orchestrator_system.py`)
+
+### LLMProvider（マルチLLMプロバイダー）
+
+**責務**:
+- 複数LLMプロバイダー（OpenAI, Google, Anthropic, Ollama）の抽象化
+- 構造化出力（Structured Output）のサポート
+- ビジョン機能（PDF解析）のサポート
+- 環境変数によるプロバイダー切り替え
+
+**インターフェース**:
+```python
+from typing import Protocol, TypeVar
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
+
+class LLMProvider(Protocol):
+    """LLMプロバイダーのプロトコル"""
+
+    @property
+    def model_name(self) -> str:
+        """使用中のモデル名を返す"""
+        ...
+
+    @property
+    def provider_name(self) -> str:
+        """プロバイダー名を返す"""
+        ...
+
+    @property
+    def supports_vision(self) -> bool:
+        """ビジョン機能のサポート有無"""
+        ...
+
+    async def ainvoke_structured(
+        self,
+        prompt: str,
+        output_schema: type[T],
+    ) -> T:
+        """構造化出力でLLM呼び出し
+
+        Args:
+            prompt: プロンプト
+            output_schema: 出力スキーマ（Pydantic BaseModel）
+
+        Returns:
+            スキーマに従った構造化出力
+
+        Raises:
+            LLMProviderError: API呼び出しに失敗した場合
+        """
+        ...
+
+    async def ainvoke_vision(
+        self,
+        text_prompt: str,
+        image_data: bytes,
+        mime_type: str = "image/png",
+    ) -> str:
+        """ビジョン入力でLLM呼び出し（PDF解析用）
+
+        Args:
+            text_prompt: テキストプロンプト
+            image_data: 画像データ（バイト列）
+            mime_type: MIMEタイプ
+
+        Returns:
+            LLMの応答テキスト
+
+        Raises:
+            LLMProviderError: API呼び出しに失敗した場合
+        """
+        ...
+```
+
+**設定クラス**:
+```python
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+class LLMConfig(BaseSettings):
+    """LLM統合設定"""
+
+    # テキスト分析用
+    provider: LLMProviderType = Field(default=LLMProviderType.GOOGLE)
+    model: str | None = Field(default=None)
+
+    # ビジョン用（省略時はprovider/modelと同じ）
+    vision_provider: LLMProviderType | None = Field(default=None)
+    vision_model: str | None = Field(default=None)
+
+    # 共通設定
+    timeout: int = Field(default=120)
+    max_retries: int = Field(default=3)
+    rpm_limit: int = Field(default=60)
+
+    # APIキー
+    openai_api_key: str | None = Field(default=None)
+    google_api_key: str | None = Field(default=None)
+    anthropic_api_key: str | None = Field(default=None)
+    ollama_base_url: str = Field(default="http://localhost:11434")
+
+    model_config = SettingsConfigDict(
+        env_prefix="LLM_",
+        env_file=".env",
+    )
+```
+
+**ファクトリー関数**:
+```python
+from company_research_agent.llm import (
+    create_llm_provider,
+    get_default_provider,
+    get_vision_provider,
+)
+
+# 環境変数から自動設定
+provider = get_default_provider()
+vision_provider = get_vision_provider()
+
+# 明示的な設定
+config = LLMConfig(provider=LLMProviderType.OPENAI, model="gpt-4o")
+provider = create_llm_provider(config)
+```
+
+**対応プロバイダー**:
+| プロバイダー | テキスト用デフォルト | ビジョン用デフォルト |
+|-------------|---------------------|---------------------|
+| OpenAI | gpt-4o | gpt-4o |
+| Google | gemini-2.5-flash-preview-05-20 | 同左 |
+| Anthropic | claude-sonnet-4-20250514 | 同左 |
+| Ollama | llama3.2 | llava |
+
+**依存関係**:
+- `langchain-google-genai`: Google Gemini API連携
+- `langchain-openai`: OpenAI API連携
+- `langchain-anthropic`: Anthropic API連携
+- `langchain-ollama`: Ollama連携
+- `tenacity`: リトライ処理
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/llm/`)
+
+### VisionLLMClient（PDF解析用ビジョンクライアント）
+
+**責務**:
+- PDFからのテキスト抽出（Vision機能を使用）
+- 任意のビジョン対応LLMプロバイダーでのPDF解析
+- レート制限対応とリトライ処理
+
+**インターフェース**:
+```python
+from pathlib import Path
+
+class VisionLLMClient:
+    """PDF解析用のビジョンLLMクライアント"""
+
+    def __init__(
+        self,
+        provider: LLMProvider | None = None,
+        rpm_limit: int = 60,
+    ) -> None:
+        """クライアントを初期化する
+
+        Args:
+            provider: LLMプロバイダー（省略時はget_vision_provider()を使用）
+            rpm_limit: レート制限（RPM）
+        """
+        ...
+
+    def extract_pdf_to_markdown(
+        self,
+        pdf_path: Path,
+        start_page: int | None = None,
+        end_page: int | None = None,
+    ) -> str:
+        """PDFからテキストを抽出してマークダウン形式で返す
+
+        Args:
+            pdf_path: PDFファイルのパス
+            start_page: 開始ページ（1-based）
+            end_page: 終了ページ（1-based）
+
+        Returns:
+            マークダウン形式のテキスト
+
+        Raises:
+            LLMProviderError: API呼び出しに失敗した場合
+        """
+        ...
+```
+
+**依存関係**:
+- `LLMProvider`: LLMプロバイダー抽象化レイヤー
+- `PyMuPDF (fitz)`: PDF→画像変換
+- `tenacity`: リトライ処理
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/clients/vision_client.py`)
 
 ### XBRLParser（XBRL解析）
 
@@ -535,7 +878,9 @@ class PDFParserProtocol(Protocol):
 - `pdfplumber`: 基本的なPDF処理（テキスト抽出、シンプルな表）
 - `pymupdf4llm`: マークダウン変換（pymupdf/fitz ベース）
 - `yomitoku`: 日本語OCR（複雑な表、スキャンPDF）
-- `google-generativeai`: Gemini API（最終手段）
+- `VisionLLMClient`: ビジョンLLM（最終手段、マルチプロバイダー対応）
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/parsers/pdf_parser.py`)
 
 ### FinancialAnalyzer（財務分析）
 
@@ -1098,6 +1443,11 @@ class DatabaseError(EDINETAssistantError):
 - **XBRLParser**: 各財務項目の抽出ロジック、フォールバック処理
 - **FinancialAnalyzer**: 各財務指標の計算ロジック、エッジケース（ゼロ除算等）
 - **EDINETClient**: レスポンスのパース、エラーハンドリング
+- **LLMモジュール**: プロバイダー抽象化レイヤー ✅ 実装済（106テスト）
+  - LLMProviderType enum（8テスト）
+  - LLMConfig設定クラス（22テスト）
+  - ファクトリーメソッド（18テスト）
+  - 各プロバイダー初期化・設定・ビジョン機能（58テスト）
 
 ### 統合テスト
 
@@ -1113,6 +1463,387 @@ class DatabaseError(EDINETAssistantError):
 
 ---
 
+## LangGraphワークフロー設計
+
+### ワークフロー概要
+
+有価証券報告書のLLM分析機能をLangGraphで構造化し、各分析機能をノードとして実装する。
+並列実行と個別出力・統合レポートの両方に対応する。
+
+### ワークフロー構成図
+
+```mermaid
+graph TD
+    subgraph "入力処理"
+        A[EDINETNode<br/>書類取得]
+        B[PDFParseNode<br/>マークダウン化]
+    end
+
+    subgraph "並列分析"
+        C[BusinessSummaryNode<br/>事業要約]
+        D[RiskExtractionNode<br/>リスク抽出]
+        E[FinancialAnalysisNode<br/>財務分析]
+    end
+
+    subgraph "比較・統合"
+        F[PeriodComparisonNode<br/>前期比較]
+        G[AggregatorNode<br/>結果統合]
+    end
+
+    A --> B
+    B --> C
+    B --> D
+    B --> E
+    C --> F
+    D --> F
+    E --> F
+    F --> G
+```
+
+### ノード一覧
+
+| ノード名 | 責務 | 依存 | 入力 | 出力 |
+|---------|------|------|------|------|
+| `EDINETNode` | EDINET書類取得 | EDINETClient | doc_id | pdf_path |
+| `PDFParseNode` | PDF解析・マークダウン化 | PDFParser, VisionLLMClient | pdf_path | markdown_content |
+| `BusinessSummaryNode` | 事業要約・戦略分析 | LLMProvider | markdown_content | BusinessSummary |
+| `RiskExtractionNode` | リスク要因抽出・分類 | LLMProvider | markdown_content | RiskAnalysis |
+| `FinancialAnalysisNode` | 財務状況・業績分析 | LLMProvider | markdown_content | FinancialAnalysis |
+| `PeriodComparisonNode` | 前期との比較分析 | LLMProvider | current/prior markdown | PeriodComparison |
+| `AggregatorNode` | 結果統合・レポート生成 | LLMProvider | 全分析結果 | ComprehensiveReport |
+
+### State設計
+
+```python
+from typing import TypedDict
+from pydantic import BaseModel
+
+class AnalysisState(TypedDict):
+    """LLM分析ワークフローの状態"""
+    # 入力
+    doc_id: str
+    prior_doc_id: str | None
+
+    # 中間結果（PDFパス）
+    pdf_path: str | None
+    prior_pdf_path: str | None
+
+    # 中間結果（マークダウン）
+    markdown_content: str | None
+    prior_markdown_content: str | None
+
+    # 個別出力（各ノードの結果）
+    business_summary: BusinessSummary | None
+    risk_analysis: RiskAnalysis | None
+    financial_analysis: FinancialAnalysis | None
+    period_comparison: PeriodComparison | None
+
+    # 統合出力
+    comprehensive_report: ComprehensiveReport | None
+
+    # メタデータ
+    errors: list[str]
+    completed_nodes: list[str]
+```
+
+### 出力スキーマ
+
+#### BusinessSummary（事業要約）
+
+```python
+class BusinessSummary(BaseModel):
+    """事業要約の出力スキーマ"""
+    company_name: str                    # 企業名
+    fiscal_year: str                     # 対象会計年度
+    business_description: str            # 事業概要
+    main_products_services: list[str]    # 主要製品・サービス
+    business_segments: list[BusinessSegment]  # 事業セグメント
+    competitive_advantages: list[str]    # 競争優位性
+    growth_strategy: str                 # 成長戦略
+    key_initiatives: list[str]           # 重点施策
+```
+
+#### RiskAnalysis（リスク分析）
+
+```python
+class RiskItem(BaseModel):
+    """リスク項目"""
+    category: str                        # リスクカテゴリ（市場、規制、財務等）
+    title: str                           # リスクタイトル
+    description: str                     # リスク説明
+    severity: str                        # 重要度（高/中/低）
+    mitigation: str | None               # 対策
+
+class RiskAnalysis(BaseModel):
+    """リスク分析の出力スキーマ"""
+    risks: list[RiskItem]                # リスク一覧
+    new_risks: list[str]                 # 新規リスク（前期比較時）
+    risk_summary: str                    # リスク総括
+```
+
+#### FinancialAnalysis（財務分析）
+
+```python
+class FinancialHighlight(BaseModel):
+    """財務ハイライト"""
+    metric_name: str                     # 指標名
+    current_value: str                   # 当期値
+    prior_value: str | None              # 前期値
+    change_rate: str | None              # 増減率
+    comment: str                         # コメント
+
+class FinancialAnalysis(BaseModel):
+    """財務分析の出力スキーマ"""
+    revenue_analysis: str                # 売上分析
+    profit_analysis: str                 # 利益分析
+    cash_flow_analysis: str              # キャッシュフロー分析
+    financial_position: str              # 財政状態
+    highlights: list[FinancialHighlight] # ハイライト
+    outlook: str                         # 今後の見通し
+```
+
+#### PeriodComparison（前期比較）
+
+```python
+class ChangePoint(BaseModel):
+    """変化点"""
+    category: str                        # カテゴリ（事業、財務、リスク等）
+    title: str                           # 変化タイトル
+    prior_state: str                     # 前期の状態
+    current_state: str                   # 当期の状態
+    significance: str                    # 重要度（高/中/低）
+    implication: str                     # 示唆
+
+class PeriodComparison(BaseModel):
+    """前期比較の出力スキーマ"""
+    change_points: list[ChangePoint]     # 変化点一覧
+    new_developments: list[str]          # 新規展開事項
+    discontinued_items: list[str]        # 終了・中止事項
+    overall_assessment: str              # 総合評価
+```
+
+#### ComprehensiveReport（統合レポート）
+
+```python
+class ComprehensiveReport(BaseModel):
+    """統合レポートの出力スキーマ"""
+    executive_summary: str               # エグゼクティブサマリー
+    business_summary: BusinessSummary    # 事業要約
+    risk_analysis: RiskAnalysis          # リスク分析
+    financial_analysis: FinancialAnalysis # 財務分析
+    period_comparison: PeriodComparison | None  # 前期比較（オプション）
+    investment_highlights: list[str]     # 投資ハイライト
+    concerns: list[str]                  # 懸念事項
+    generated_at: datetime               # 生成日時
+```
+
+### ノード基底クラス
+
+```python
+from abc import ABC, abstractmethod
+from typing import TypeVar, Generic
+
+T = TypeVar('T')
+
+class AnalysisNode(ABC, Generic[T]):
+    """分析ノードの基底クラス"""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """ノード名を返す"""
+        ...
+
+    @abstractmethod
+    async def execute(self, state: AnalysisState) -> T:
+        """ノードを実行する"""
+        ...
+
+    async def __call__(self, state: AnalysisState) -> dict:
+        """LangGraphから呼び出されるエントリーポイント
+
+        各ノードの開始/完了時にプログレスログを出力する。
+        """
+        from company_research_agent.core.progress import (
+            print_node_start,
+            print_node_complete,
+        )
+
+        print_node_start(self.name)  # 「▷ ノード: xxx を実行中...」
+        try:
+            result = await self.execute(state)
+            update = self._update_state(state, result)
+            update.setdefault("completed_nodes", []).append(self.name)
+            print_node_complete(self.name, success=True)  # 「✓ ノード: xxx 完了」
+            return update
+        except Exception as e:
+            print_node_complete(self.name, success=False)  # 「✗ ノード: xxx 失敗」
+            return self._handle_error(state, e)
+
+    @abstractmethod
+    def _update_state(self, state: AnalysisState, result: T) -> dict:
+        """実行結果でStateを更新する"""
+        ...
+
+    def _handle_error(self, state: AnalysisState, error: Exception) -> dict:
+        """エラーハンドリング"""
+        errors = state.get("errors", [])
+        errors.append(f"{self.name}: {str(error)}")
+        return {"errors": errors}
+```
+
+**ログ出力関数** (`src/company_research_agent/core/progress.py`):
+```python
+def print_node_start(node_name: str) -> None:
+    """グラフノード開始ログ（インデント付き、dim表示）"""
+    console.print(f"  [dim]▷[/dim] ノード: {node_name} を実行中...")
+
+def print_node_complete(node_name: str, success: bool = True) -> None:
+    """グラフノード完了ログ（インデント付き）"""
+    if success:
+        console.print(f"  [green]✓[/green] ノード: {node_name} 完了")
+    else:
+        console.print(f"  [red]✗[/red] ノード: {node_name} 失敗")
+```
+
+### グラフ構築
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_analysis_graph() -> StateGraph:
+    """分析ワークフローのグラフを構築する"""
+    graph = StateGraph(AnalysisState)
+
+    # ノード追加
+    graph.add_node("edinet", EDINETNode())
+    graph.add_node("pdf_parse", PDFParseNode())
+    graph.add_node("business_summary", BusinessSummaryNode())
+    graph.add_node("risk_extraction", RiskExtractionNode())
+    graph.add_node("financial_analysis", FinancialAnalysisNode())
+    graph.add_node("period_comparison", PeriodComparisonNode())
+    graph.add_node("aggregator", AggregatorNode())
+
+    # エッジ追加（順次処理）
+    graph.add_edge("edinet", "pdf_parse")
+
+    # 並列処理の分岐
+    graph.add_edge("pdf_parse", "business_summary")
+    graph.add_edge("pdf_parse", "risk_extraction")
+    graph.add_edge("pdf_parse", "financial_analysis")
+
+    # 並列処理の合流
+    graph.add_edge("business_summary", "period_comparison")
+    graph.add_edge("risk_extraction", "period_comparison")
+    graph.add_edge("financial_analysis", "period_comparison")
+
+    # 最終処理
+    graph.add_edge("period_comparison", "aggregator")
+    graph.add_edge("aggregator", END)
+
+    # エントリーポイント
+    graph.set_entry_point("edinet")
+
+    return graph.compile()
+```
+
+### 使用例
+
+#### 個別ノード実行
+
+```python
+from company_research_agent.workflows import AnalysisGraph
+
+# デフォルトのLLMプロバイダーを使用（環境変数から設定）
+graph = AnalysisGraph()
+
+# 個別ノード実行（事業要約のみ）
+summary = await graph.run_node("business_summary", doc_id="S100...")
+
+# 個別ノード実行（リスク抽出のみ）
+risks = await graph.run_node("risk_extraction", doc_id="S100...")
+```
+
+#### プロバイダー指定で実行
+
+```python
+from company_research_agent.llm import get_default_provider, create_llm_provider
+from company_research_agent.llm.config import LLMConfig
+from company_research_agent.llm.types import LLMProviderType
+
+# 環境変数から自動設定
+provider = get_default_provider()
+graph = AnalysisGraph(llm_provider=provider)
+
+# 明示的にプロバイダーを指定
+config = LLMConfig(provider=LLMProviderType.ANTHROPIC, model="claude-sonnet-4-20250514")
+provider = create_llm_provider(config)
+graph = AnalysisGraph(llm_provider=provider)
+```
+
+#### 全ワークフロー実行
+
+```python
+# 全ワークフロー実行
+result = await graph.run_full_analysis(
+    doc_id="S100...",
+    prior_doc_id="S100..."  # 前期比較用（オプション）
+)
+
+# 個別結果へのアクセス
+print(result.business_summary)
+print(result.risk_analysis)
+print(result.financial_analysis)
+print(result.period_comparison)
+print(result.comprehensive_report)  # 統合レポート
+```
+
+### ファイル構成
+
+```
+src/company_research_agent/
+├── llm/                          # LLMプロバイダー抽象化レイヤー ✅ 実装済
+│   ├── __init__.py
+│   ├── types.py                 # LLMProviderType enum
+│   ├── config.py                # LLMConfig設定クラス
+│   ├── provider.py              # LLMProviderプロトコル
+│   ├── factory.py               # create_llm_provider(), get_default_provider()
+│   └── providers/
+│       ├── __init__.py
+│       ├── base.py              # BaseLLMProvider基底クラス
+│       ├── openai.py            # OpenAIProvider
+│       ├── google.py            # GoogleProvider
+│       ├── anthropic.py         # AnthropicProvider
+│       └── ollama.py            # OllamaProvider
+├── clients/
+│   └── vision_client.py         # VisionLLMClient（PDF解析用）✅ 実装済
+├── workflows/                    # LangGraphワークフロー
+│   ├── __init__.py
+│   ├── state.py                 # AnalysisState定義
+│   ├── graph.py                 # グラフ構築・実行
+│   └── nodes/                   # 各ノード実装
+│       ├── __init__.py
+│       ├── base.py              # ノード基底クラス
+│       ├── edinet_node.py       # EDINET書類取得
+│       ├── pdf_parse_node.py    # PDF解析
+│       ├── business_summary_node.py   # 事業要約
+│       ├── risk_extraction_node.py    # リスク抽出
+│       ├── financial_analysis_node.py # 財務分析
+│       ├── period_comparison_node.py  # 前期比較
+│       └── aggregator_node.py   # 結果統合
+├── schemas/
+│   └── llm_analysis.py          # 分析結果スキーマ
+└── prompts/                     # プロンプトテンプレート
+    ├── __init__.py
+    ├── business_summary.py
+    ├── risk_extraction.py
+    ├── financial_analysis.py
+    └── period_comparison.py
+```
+
+---
+
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月18日
+**バージョン**: 1.5
+**ステータス**: 実装完了（ノード実行ログ、OrchestratorResultメタデータ追加）

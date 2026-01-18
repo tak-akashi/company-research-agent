@@ -1,5 +1,8 @@
 """Shared test fixtures for Company Research Agent tests."""
 
+from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
 
 from company_research_agent.core.config import EDINETConfig
@@ -108,3 +111,44 @@ def sample_metadata_only_response() -> dict[str, object]:
             "message": "OK",
         }
     }
+
+
+# PDF Parser fixtures
+
+
+@pytest.fixture
+def mock_pdfplumber_pdf() -> MagicMock:
+    """Create a mock pdfplumber PDF object with 3 pages."""
+    mock_pdf = MagicMock()
+
+    # Create mock pages
+    mock_page1 = MagicMock()
+    mock_page1.width = 612.0
+    mock_page1.height = 792.0
+    mock_page1.extract_text.return_value = (
+        "Page 1 content\n1. Introduction ..... 1\n2. Methods ..... 5"
+    )
+
+    mock_page2 = MagicMock()
+    mock_page2.width = 612.0
+    mock_page2.height = 792.0
+    mock_page2.extract_text.return_value = "Page 2 content\nThis is the second page."
+
+    mock_page3 = MagicMock()
+    mock_page3.width = 612.0
+    mock_page3.height = 792.0
+    mock_page3.extract_text.return_value = "Page 3 content\nThis is the third page."
+
+    mock_pdf.pages = [mock_page1, mock_page2, mock_page3]
+    mock_pdf.metadata = {"Author": "Test Author", "Title": "Test Document"}
+
+    return mock_pdf
+
+
+@pytest.fixture
+def mock_pdf_path(tmp_path: Path) -> Path:
+    """Create a temporary path for a mock PDF file."""
+    pdf_path = tmp_path / "test.pdf"
+    # Create an empty file to simulate PDF existence
+    pdf_path.touch()
+    return pdf_path

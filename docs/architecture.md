@@ -52,7 +52,12 @@
 
 | 技術 | バージョン | 用途 | 選定理由 |
 |------|-----------|------|----------|
-| google-generativeai | 0.8+ | Gemini API | LLM分析、PDF解析の最終手段 |
+| LangGraph | 1.0+ | エージェントオーケストレーション | 状態管理、ワークフロー制御、マルチエージェント対応 |
+| LangChain | 1.0+ | LLM基盤フレームワーク | プロンプト管理、チェーン構築、ツール統合 |
+| langchain-google-genai | 2.1+ | Gemini API連携 | LangChain統合、Gemini 2.5 Flash対応 |
+| langchain-openai | 0.3+ | OpenAI API連携 | GPT-4o対応、Structured Output |
+| langchain-anthropic | 0.3+ | Anthropic API連携 | Claude Sonnet/Opus対応 |
+| langchain-ollama | 0.2+ | Ollama連携 | ローカルLLM実行、llama3.2/llava対応 |
 | pgvector | 0.3+ | ベクトル検索 | PostgreSQLネイティブ、LangChain連携 |
 
 ### 開発ツール
@@ -119,11 +124,19 @@
 │   └─ REST API（FastAPI）                                │
 ├─────────────────────────────────────────────────────────┤
 │   サービスレイヤー                                        │
-│   ├─ EDINETClient（EDINET API連携）                     │
+│   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
+│   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
+│   ├─ EDINETCodeListClient（企業検索）✅ 実装済          │
+│   ├─ LLMProvider（マルチLLM抽象化）✅ 実装済            │
+│   │   ├─ OpenAI / Google / Anthropic / Ollama         │
+│   ├─ VisionLLMClient（PDF解析用ビジョンLLM）✅ 実装済   │
 │   ├─ XBRLParser（XBRL解析）                             │
-│   ├─ PDFParser（PDF解析）                               │
+│   ├─ PDFParser（PDF解析）✅ 実装済                      │
 │   ├─ FinancialAnalyzer（財務分析）                       │
-│   ├─ LLMAnalyzer（LLM分析）                             │
+│   ├─ AnalysisWorkflow（LangGraph LLM分析）✅ 実装済    │
+│   ├─ QueryOrchestrator（自然言語オーケストレーター）✅    │
+│   │   ├─ search_company / search_documents / download  │
+│   │   └─ analyze / compare / summarize ツール         │
 │   └─ VectorSearchService（ベクトル検索）                 │
 ├─────────────────────────────────────────────────────────┤
 │   リポジトリレイヤー                                      │
@@ -147,14 +160,15 @@
 ```python
 # OK: サービスレイヤーを呼び出す
 class DocumentAPI:
-    def __init__(self, edinet_client: EDINETClient) -> None:
-        self.edinet_client = edinet_client
+    def __init__(self, document_service: EDINETDocumentService) -> None:
+        self.document_service = document_service
 
     async def search(self, filter: DocumentFilter) -> list[DocumentMetadata]:
-        return await self.edinet_client.search_documents(filter)
+        return await self.document_service.search_documents(filter)
 
-# NG: リポジトリを直接呼び出す
+# NG: クライアントやリポジトリを直接呼び出す
 # async def search(self, filter: DocumentFilter):
+#     return await self.edinet_client.get_document_list(date.today())  # ❌
 #     return await self.document_repository.find_by_filter(filter)  # ❌
 ```
 
@@ -313,7 +327,17 @@ data/
   ```bash
   # .env ファイル（.gitignore対象）
   EDINET_API_KEY=xxxxx
-  GEMINI_API_KEY=xxxxx
+
+  # LLMプロバイダー設定
+  LLM_PROVIDER=google  # openai / google / anthropic / ollama
+  LLM_MODEL=gemini-2.5-flash-preview-05-20
+
+  # APIキー（使用するプロバイダーに応じて設定）
+  GOOGLE_API_KEY=xxxxx
+  OPENAI_API_KEY=xxxxx
+  ANTHROPIC_API_KEY=xxxxx
+  OLLAMA_BASE_URL=http://localhost:11434
+
   DATABASE_URL=postgresql://user:pass@localhost/db
 
   # ソースコードにハードコードしない
@@ -410,6 +434,158 @@ data/
 
 ---
 
+## LangGraph LLM分析ワークフロー
+
+### ワークフロー構成
+
+LLM分析機能はLangGraphを使用して構造化されたワークフローとして実装する。
+各分析機能をノードとして独立させ、並列実行と個別出力の両方に対応する。
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│   LangGraph Analysis Workflow                                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ┌─────────────┐     ┌─────────────┐                               │
+│   │ EDINETNode  │────▶│PDFParseNode │                               │
+│   │ (書類取得)   │     │(マークダウン) │                               │
+│   └─────────────┘     └──────┬──────┘                               │
+│                              │                                      │
+│            ┌─────────────────┼─────────────────┐                    │
+│            │                 │                 │                    │
+│            ▼                 ▼                 ▼                    │
+│   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐              │
+│   │ Business    │   │   Risk      │   │ Financial   │              │
+│   │ Summary     │   │ Extraction  │   │ Analysis    │              │
+│   │    Node     │   │    Node     │   │    Node     │  ← 並列実行   │
+│   └──────┬──────┘   └──────┬──────┘   └──────┬──────┘              │
+│          │                 │                 │                      │
+│          └─────────────────┼─────────────────┘                      │
+│                            ▼                                        │
+│                   ┌─────────────┐                                   │
+│                   │  Period     │                                   │
+│                   │ Comparison  │                                   │
+│                   │    Node     │                                   │
+│                   └──────┬──────┘                                   │
+│                          ▼                                          │
+│                   ┌─────────────┐                                   │
+│                   │ Aggregator  │                                   │
+│                   │    Node     │                                   │
+│                   └─────────────┘                                   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### ノード構成
+
+| ノード | 責務 | 依存 | 出力型 |
+|-------|------|------|--------|
+| EDINETNode | EDINET書類取得 | EDINETClient | pdf_path |
+| PDFParseNode | PDF→マークダウン変換 | PDFParser, VisionLLMClient | markdown_content |
+| BusinessSummaryNode | 事業要約・戦略分析 | LLMProvider | BusinessSummary |
+| RiskExtractionNode | リスク要因抽出・分類 | LLMProvider | RiskAnalysis |
+| FinancialAnalysisNode | 財務状況・業績分析 | LLMProvider | FinancialAnalysis |
+| PeriodComparisonNode | 前期との比較分析 | LLMProvider | PeriodComparison |
+| AggregatorNode | 結果統合・レポート生成 | LLMProvider | ComprehensiveReport |
+
+### ノード実行ログ
+
+各ノードの実行状況をリアルタイムでログ出力する。`progress.py` の `print_node_start`/`print_node_complete` 関数を使用。
+
+**出力例**:
+```
+▶ EDINET書類を検索中: E02778 (newest_first)
+✓ 検索完了: 1件の書類が見つかりました
+  ▷ ノード: edinet を実行中...
+  ✓ ノード: edinet 完了
+  ▷ ノード: pdf_parse を実行中...
+  ✓ ノード: pdf_parse 完了
+  ▷ ノード: business_summary を実行中...
+  ▷ ノード: risk_extraction を実行中...
+  ▷ ノード: financial_analysis を実行中...
+  ✓ ノード: business_summary 完了
+  ✓ ノード: risk_extraction 完了
+  ✓ ノード: financial_analysis 完了
+  ▷ ノード: period_comparison を実行中...
+  ✓ ノード: period_comparison 完了
+  ▷ ノード: aggregator を実行中...
+  ✓ ノード: aggregator 完了
+```
+
+**実装箇所**:
+- `src/company_research_agent/core/progress.py`: `print_node_start()`, `print_node_complete()`
+- `src/company_research_agent/workflows/nodes/base.py`: `AnalysisNode.__call__()`
+
+### ファイル構成
+
+```
+src/company_research_agent/
+├── llm/                          # LLMプロバイダー抽象化レイヤー ✅ 実装済
+│   ├── __init__.py
+│   ├── types.py                 # LLMProviderType enum
+│   ├── config.py                # LLMConfig設定クラス
+│   ├── provider.py              # LLMProviderプロトコル
+│   ├── factory.py               # create_llm_provider(), get_default_provider()
+│   └── providers/
+│       ├── __init__.py
+│       ├── base.py              # BaseLLMProvider基底クラス
+│       ├── openai.py            # OpenAIProvider
+│       ├── google.py            # GoogleProvider
+│       ├── anthropic.py         # AnthropicProvider
+│       └── ollama.py            # OllamaProvider
+├── clients/
+│   ├── edinet_client.py         # EDINET API通信 ✅ 実装済
+│   ├── edinet_code_list_client.py  # 企業検索（rapidfuzz） ✅ 実装済
+│   └── vision_client.py         # VisionLLMClient（PDF解析用） ✅ 実装済
+├── tools/                        # LangChainツール群 ✅ 実装済
+│   ├── __init__.py
+│   ├── search_company.py        # 企業検索ツール
+│   ├── search_documents.py      # 書類検索ツール
+│   ├── download_document.py     # 書類ダウンロードツール
+│   ├── analyze_document.py      # 分析ツール（AnalysisGraph wrapper）
+│   ├── compare_documents.py     # 比較ツール（PDFParser + LLM）
+│   └── summarize_document.py    # 要約ツール（PDFParser + LLM）
+├── orchestrator/                 # 自然言語オーケストレーター ✅ 実装済
+│   ├── __init__.py
+│   └── query_orchestrator.py    # QueryOrchestrator（ReActエージェント）
+├── prompts/
+│   └── orchestrator_system.py   # オーケストレーターシステムプロンプト
+│                                 # - 意図判定、検索順序判定、期間解釈機能
+├── workflows/                    # LangGraphワークフロー
+│   ├── __init__.py
+│   ├── state.py                 # AnalysisState定義
+│   ├── graph.py                 # グラフ構築・実行
+│   └── nodes/                   # 各ノード実装
+│       ├── __init__.py
+│       ├── base.py              # ノード基底クラス
+│       ├── edinet_node.py       # EDINET書類取得
+│       ├── pdf_parse_node.py    # PDF解析
+│       ├── business_summary_node.py   # 事業要約
+│       ├── risk_extraction_node.py    # リスク抽出
+│       ├── financial_analysis_node.py # 財務分析
+│       ├── period_comparison_node.py  # 前期比較
+│       └── aggregator_node.py   # 結果統合
+├── schemas/
+│   └── llm_analysis.py          # 分析結果スキーマ
+└── prompts/                     # プロンプトテンプレート
+    ├── __init__.py
+    ├── business_summary.py
+    ├── risk_extraction.py
+    ├── financial_analysis.py
+    └── period_comparison.py
+```
+
+### 依存関係
+
+ワークフローモジュールは以下の既存モジュールに依存する:
+
+- `clients/edinet_client.py` - EDINET API通信
+- `clients/vision_client.py` - ビジョンLLM通信（PDF解析用）
+- `llm/` - LLMプロバイダー抽象化レイヤー
+- `parsers/pdf_parser.py` - PDF解析
+
+---
+
 ## テスト戦略
 
 ### ユニットテスト
@@ -418,6 +594,11 @@ data/
   - XBRLParser: 各財務項目の抽出ロジック
   - FinancialAnalyzer: 財務指標の計算ロジック
   - バリデーション: 入力検証ロジック
+  - LLMモジュール: プロバイダー抽象化レイヤー ✅ 実装済（106テスト）
+    - `tests/unit/llm/test_types.py`: LLMProviderType enum（8テスト）
+    - `tests/unit/llm/test_config.py`: LLMConfig設定クラス（22テスト）
+    - `tests/unit/llm/test_factory.py`: ファクトリーメソッド（18テスト）
+    - `tests/unit/llm/test_providers.py`: 各プロバイダー（58テスト）
 - **カバレッジ目標**: 80%以上
 - **モック**: pytest-mockによる外部依存のモック
 
@@ -578,8 +759,13 @@ dependencies = [
     "asyncpg>=0.30.0,<1.0.0",
     "pgvector>=0.3.0,<1.0.0",
 
-    # AI/ML（LLM分析、PDF解析の最終手段）
-    "google-generativeai>=0.8.0,<1.0.0",
+    # AI/ML（エージェント、LLM分析、PDF解析の最終手段）
+    "langgraph>=1.0.0,<2.0.0",
+    "langchain>=1.0.0,<2.0.0",
+    "langchain-google-genai>=2.1.0,<3.0.0",
+    "langchain-openai>=0.3.0,<1.0.0",
+    "langchain-anthropic>=0.3.0,<1.0.0",
+    "langchain-ollama>=0.2.0,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -606,7 +792,13 @@ dev = [
 | pdfplumber | PDF基本解析 | 範囲指定（>=0.11,<1.0） |
 | pymupdf4llm | PDFマークダウン変換 | 最新許可（>=0.0.17） |
 | yomitoku | 日本語OCR | 範囲指定（>=0.7,<1.0） |
-| google-generativeai | LLM分析 | 範囲指定（>=0.8,<1.0） |
+| langgraph | エージェントオーケストレーション | 範囲指定（>=1.0,<2.0） |
+| langchain | LLM基盤フレームワーク | 範囲指定（>=1.0,<2.0） |
+| langchain-google-genai | Gemini API連携 | 範囲指定（>=2.1,<3.0） |
+| langchain-openai | OpenAI API連携 | 範囲指定（>=0.3,<1.0） |
+| langchain-anthropic | Anthropic API連携 | 範囲指定（>=0.3,<1.0） |
+| langchain-ollama | Ollama連携 | 範囲指定（>=0.2,<1.0） |
+| rapidfuzz | あいまい文字列マッチング | 範囲指定（>=3.0,<4.0） |
 | ruff | Linter | 最新許可（>=0.8） |
 | mypy | 型チェック | 最新許可（>=1.14） |
 | pytest | テスト | 最新許可（>=8.0） |
@@ -614,5 +806,6 @@ dev = [
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月18日
+**バージョン**: 1.5
+**ステータス**: 実装完了（ノード実行ログ、メタデータ機能追加）

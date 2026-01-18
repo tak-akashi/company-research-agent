@@ -13,6 +13,15 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "jupyterlab>=4.5.2",
+    "langgraph>=1.0.0",
+    "langchain>=1.0.0",
+    "langchain-google-genai>=2.1.0",
+    "langchain-openai>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-ollama>=0.2.0",
+    "pillow>=11.0.0",
+    "rapidfuzz>=3.0.0,<4.0.0",
+    "rich>=13.0.0",
 ]
 
 [dependency-groups]
@@ -46,6 +55,9 @@ select = [
     "B",    # flake8-bugbear
     "UP",   # pyupgrade
 ]
+ignore = [
+    "UP046",  # Generic[T] -> type parameter syntax (Python 3.12+)
+]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # load_dotenv() must run before imports
@@ -59,6 +71,17 @@ warn_unused_configs = true
 mypy_path = "src"
 packages = ["company_research_agent"]
 explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "langgraph.*",
+    "langchain.*",
+    "langchain_google_genai.*",
+    "langchain_openai.*",
+    "langchain_anthropic.*",
+    "langchain_ollama.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

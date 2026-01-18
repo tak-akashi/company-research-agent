@@ -495,6 +495,101 @@ ROA = 当期純利益 / 総資産 × 100 (%)
 - 高精度なOCR
 - 無料で利用可能
 
+### GeminiClient
+
+**定義**: Gemini APIを使用してPDFからテキストを抽出するクライアントクラス。
+
+**本プロジェクトでの用途**: PDF解析の最終手段。他の方法で解析困難な場合にLLMのVision機能を使用。
+
+**実装場所**: `src/company_research_agent/clients/gemini_client.py`
+
+**主な機能**:
+- PDFの各ページを画像に変換してGemini APIに送信
+- マークダウン形式でテキストを抽出
+- レート制限対応とリトライ処理
+
+**依存関係**: `langchain-google-genai`, `tenacity`, `PyMuPDF`
+
+**関連用語**: [Gemini API](#gemini-api), [PDFParser](#pdfparser)
+
+### PDFParser
+
+**定義**: PDFファイルからテキストを抽出し、マークダウン形式に変換するパーサークラス。
+
+**本プロジェクトでの用途**: 有価証券報告書等のPDFファイルから構造化されたテキストを抽出。
+
+**実装場所**: `src/company_research_agent/parsers/pdf_parser.py`
+
+**主な機能**:
+- PDFメタデータの取得（ページ数、目次等）
+- テキスト抽出（pdfplumber）
+- マークダウン変換（pymupdf4llm）
+- 日本語OCR（yomitoku）
+- LLM解析（Gemini API、フォールバック）
+
+**解析戦略**:
+| 戦略 | 説明 |
+|------|------|
+| `auto` | 自動選択（pymupdf4llm → yomitoku → gemini） |
+| `pdfplumber` | 基本テキスト抽出 |
+| `pymupdf4llm` | 構造保持マークダウン変換 |
+| `yomitoku` | 日本語OCR |
+| `gemini` | LLMベース抽出 |
+
+**関連用語**: [pdfplumber](#pdfplumber), [pymupdf4llm](#pymupdf4llm), [YOMITOKU](#yomitoku), [GeminiClient](#geminiclient)
+
+### ParseStrategy
+
+**定義**: PDF解析戦略を表す型エイリアス。
+
+**型定義**:
+```python
+type ParseStrategy = Literal["auto", "pdfplumber", "pymupdf4llm", "yomitoku", "gemini"]
+```
+
+**値の説明**:
+| 値 | 説明 |
+|-----|------|
+| `auto` | 自動選択。pymupdf4llm → yomitoku → gemini の順でフォールバック |
+| `pdfplumber` | pdfplumberによる基本テキスト抽出 |
+| `pymupdf4llm` | pymupdf4llmによるマークダウン変換（構造保持） |
+| `yomitoku` | YOMITOKUによる日本語OCR |
+| `gemini` | Gemini APIによるLLMベース抽出 |
+
+**実装場所**: `src/company_research_agent/core/types.py`
+
+**関連用語**: [PDFParser](#pdfparser)
+
+### LangChain
+
+**定義**: LLMアプリケーション構築のための統合フレームワーク。
+
+**公式サイト**: https://www.langchain.com/
+
+**本プロジェクトでの用途**: LLM基盤フレームワーク、プロンプト管理、チェーン構築。
+
+**バージョン**: langchain 1.0+
+
+**選定理由**:
+- 複数LLMプロバイダーの統一インターフェース
+- 豊富なツール統合エコシステム
+- プロダクション対応の機能（トレーシング、評価等）
+
+### LangGraph
+
+**定義**: LangChain上で動作するエージェントオーケストレーションフレームワーク。
+
+**公式サイト**: https://langchain-ai.github.io/langgraph/
+
+**本プロジェクトでの用途**: エージェントの状態管理、ワークフロー制御、マルチエージェント対応。
+
+**バージョン**: langgraph 1.0+
+
+**選定理由**:
+- 状態機械ベースのエージェント設計
+- 人間介入（Human-in-the-loop）のサポート
+- 複雑なワークフローの可視化・デバッグ
+
 ### Gemini API
 
 **定義**: Google提供の生成AIモデルAPI。
@@ -503,11 +598,12 @@ ROA = 当期純利益 / 総資産 × 100 (%)
 
 **本プロジェクトでの用途**: LLM分析機能、PDF解析の最終手段（他の方法で解析困難な場合）。
 
-**バージョン**: google-generativeai 0.8+
+**バージョン**: langchain-google-genai 2.1+（LangChain経由で利用）
 
 **選定理由**:
 - 高精度な文書理解能力
 - マルチモーダル対応（画像+テキスト）
+- LangChain統合による一貫したインターフェース
 - API課金のため、コスト効率を考慮して最終手段として使用
 
 ### Streamlit
@@ -936,6 +1032,74 @@ raise EDINETAPIError(
 - ユーザー: IDを確認して再試行
 - 開発者: リソース存在確認ロジックの追加
 
+### PDFParseError
+
+**クラス名**: `PDFParseError`
+
+**発生条件**: PDF解析に失敗した場合。
+
+**属性**:
+- `message`: エラーメッセージ
+- `pdf_path`: 対象PDFファイルのパス
+- `strategy`: 使用された解析戦略（オプション）
+
+**対処方法**:
+- ユーザー: 別のPDFを試す、または解析戦略を変更
+- 開発者: フォールバック処理の確認、ログ分析
+
+**例**:
+```python
+raise PDFParseError(
+    message="All strategies failed",
+    pdf_path="/path/to/document.pdf",
+    strategy="auto"
+)
+```
+
+### GeminiAPIError
+
+**クラス名**: `GeminiAPIError`
+
+**発生条件**: Gemini API呼び出しに失敗した場合。
+
+**属性**:
+- `message`: エラーメッセージ
+- `model`: 使用されたモデル名（オプション）
+
+**対処方法**:
+- ユーザー: しばらく待ってから再試行
+- 開発者: APIキー有効性確認、レート制限確認
+
+**例**:
+```python
+raise GeminiAPIError(
+    message="Rate limit exceeded",
+    model="gemini-2.5-flash-preview-05-20"
+)
+```
+
+### YomitokuError
+
+**クラス名**: `YomitokuError`
+
+**発生条件**: Yomitoku OCR処理に失敗した場合。
+
+**属性**:
+- `message`: エラーメッセージ
+- `pdf_path`: 対象PDFファイルのパス（オプション）
+
+**対処方法**:
+- ユーザー: Yomitokuがインストールされているか確認
+- 開発者: 依存関係の確認、別の解析戦略へのフォールバック
+
+**例**:
+```python
+raise YomitokuError(
+    message="yomitoku is not installed",
+    pdf_path="/path/to/document.pdf"
+)
+```
+
 ---
 
 ## 索引
@@ -982,10 +1146,15 @@ raise EDINETAPIError(
 - [edinet-xbrl](#edinet-xbrl)
 - [FastAPI](#fastapi)
 - [Gemini API](#gemini-api)
+- [GeminiAPIError](#geminiapieerror)
+- [GeminiClient](#geminiclient)
 - [httpx](#httpx)
 - [mypy](#mypy)
 - [ORM](#orm)
+- [ParseStrategy](#parsestrategy)
 - [pdfplumber](#pdfplumber)
+- [PDFParseError](#pdfparseerror)
+- [PDFParser](#pdfparser)
 - [pgvector](#pgvector)
 - [PL](#pl)
 - [PostgreSQL](#postgresql)
@@ -1005,6 +1174,7 @@ raise EDINETAPIError(
 - [WSL2](#wsl2)
 - [XBRL](#xbrl)
 - [YOMITOKU](#yomitoku)
+- [YomitokuError](#yomitokuerror)
 
 ---
 

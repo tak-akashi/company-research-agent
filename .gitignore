@@ -7,7 +7,19 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+# Downloaded files (keep directory structure)
+downloads/*
+!downloads/.gitkeep
+!downloads/pdfs/
+downloads/pdfs/*
+!downloads/pdfs/.gitkeep
+
+# Output files (keep directory structure)
+outputs/*
+!outputs/.gitkeep
+!outputs/reports/
+outputs/reports/*
+!outputs/reports/.gitkeep
 eggs/
 .eggs/
 lib/
@@ -41,6 +53,7 @@ ENV/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+data/cache/
 
 # Logs
 *.log
@@ -65,3 +78,5 @@ coverage.xml
 *.cover
 
 temp/
+.steering/
+.claude/

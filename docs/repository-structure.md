@@ -125,6 +125,7 @@ parsers/
 **役割**: ビジネスロジックの実装
 
 **配置ファイル**:
+- `edinet_document_service.py`: EDINET書類検索サービス ✅ 実装済
 - `document_service.py`: 書類検索・取得サービス
 - `financial_analyzer.py`: 財務分析サービス
 - `batch_processor.py`: バッチ処理サービス
@@ -143,6 +144,7 @@ parsers/
 ```
 services/
 ├── __init__.py
+├── edinet_document_service.py   # EDINET書類検索 ✅ 実装済
 ├── document_service.py          # 書類検索・取得
 ├── financial_analyzer.py        # 財務分析
 ├── indicator_calculator.py      # 財務指標計算
@@ -217,6 +219,8 @@ models/
 **役割**: Pydanticスキーマ（API入出力、バリデーション）
 
 **配置ファイル**:
+- `edinet_schemas.py`: EDINET APIレスポンススキーマ ✅ 実装済
+- `document_filter.py`: 書類検索フィルタ（dataclass） ✅ 実装済
 - `document_schemas.py`: 書類関連スキーマ
 - `company_schemas.py`: 企業関連スキーマ
 - `financial_schemas.py`: 財務データスキーマ
@@ -234,6 +238,8 @@ models/
 ```
 schemas/
 ├── __init__.py
+├── edinet_schemas.py            # EDINETスキーマ ✅ 実装済
+├── document_filter.py           # 検索フィルタ ✅ 実装済
 ├── document_schemas.py          # 書類スキーマ
 ├── company_schemas.py           # 企業スキーマ
 ├── financial_schemas.py         # 財務スキーマ
@@ -281,12 +287,18 @@ core/
 ```
 tests/unit/
 ├── conftest.py                  # 共通フィクスチャ
+├── clients/
+│   └── test_edinet_client.py    # ✅ 実装済
+├── core/
+│   ├── test_config.py           # ✅ 実装済
+│   └── test_exceptions.py       # ✅ 実装済
+├── schemas/
+│   └── test_edinet_schemas.py   # ✅ 実装済
+├── services/
+│   └── test_edinet_document_service.py  # ✅ 実装済
 ├── parsers/
 │   ├── test_xbrl_parser.py
 │   └── test_pdf_parser.py
-├── services/
-│   ├── test_financial_analyzer.py
-│   └── test_indicator_calculator.py
 └── repositories/
     └── test_company_repository.py
 ```
