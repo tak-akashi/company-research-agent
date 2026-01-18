@@ -392,8 +392,14 @@ class EDINETClientProtocol(Protocol):
 from typing import Protocol
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 
 from company_research_agent.schemas.edinet_schemas import DocumentMetadata
+
+class SearchOrder(str, Enum):
+    """検索順序"""
+    NEWEST_FIRST = "newest_first"  # 今日から過去へ（デフォルト）
+    OLDEST_FIRST = "oldest_first"  # 過去から今日へ
 
 @dataclass
 class DocumentFilter:
@@ -404,6 +410,8 @@ class DocumentFilter:
     doc_type_codes: list[str] | None = None  # 書類種別コード（OR条件）
     start_date: date | None = None       # 検索開始日
     end_date: date | None = None         # 検索終了日
+    search_order: SearchOrder = SearchOrder.NEWEST_FIRST  # 検索順序
+    max_documents: int | None = None     # 取得する書類の最大数（早期終了用）
 
 class EDINETDocumentServiceProtocol(Protocol):
     """EDINET書類検索サービスプロトコル"""
@@ -416,6 +424,17 @@ class EDINETDocumentServiceProtocol(Protocol):
 
         指定期間の各日付でEDINET APIを呼び出し、
         取得した書類をフィルタ条件で絞り込んで返す。
+
+        検索順序:
+        - NEWEST_FIRST（デフォルト）: end_dateからstart_dateへ遡って検索
+        - OLDEST_FIRST: start_dateからend_dateへ向かって検索
+
+        早期終了:
+        - max_documentsが指定された場合、その件数に達した時点で検索を終了
+        - 「最新の有報を1件取得」のような用途に有効
+
+        結果のソート:
+        - 結果は常にsubmit_date_timeの降順（最新順）でソートされる
         """
         ...
 ```
@@ -424,6 +443,90 @@ class EDINETDocumentServiceProtocol(Protocol):
 - `EDINETClient`: EDINET API通信
 
 **実装状態**: ✅ 実装完了 (`src/company_research_agent/services/edinet_document_service.py`)
+
+### QueryOrchestrator（自然言語クエリ処理）
+
+**責務**:
+- ユーザーの自然言語クエリを解釈し、適切なツールを呼び出す
+- 期間表現（「過去1年間」「過去半年」など）を具体的な日付範囲に変換
+- 検索順序（最新/最古）の自動判定
+- ReActエージェントとしてのツール実行制御
+
+**期間表現の解釈**:
+
+システムプロンプトにより、以下の自然言語期間表現を具体的な日付（YYYY-MM-DD形式）に変換:
+
+| ユーザーの表現 | start_date | end_date |
+|---------------|------------|----------|
+| 「過去1年間」「直近1年」 | 1年前の日付 | 今日 |
+| 「過去半年」「直近6ヶ月」 | 6ヶ月前の日付 | 今日 |
+| 「過去3年」「直近3年間」 | 3年前の日付 | 今日 |
+| 「過去5年」 | 5年前の日付 | 今日 |
+| 「2024年1月以降」 | 2024-01-01 | 今日 |
+| 「2023年度」 | 2023-04-01 | 2024-03-31 |
+| 「今年」 | 今年の1月1日 | 今日 |
+| 「去年」「昨年」 | 去年の1月1日 | 去年の12月31日 |
+| 期間指定なし | 省略（デフォルト5年） | 省略 |
+
+**使用例**:
+```
+ユーザー: 「ソニーの過去1年間のすべてのドキュメントを検索して」
+→ search_documents(edinet_code="E01777", start_date="2025-01-18", end_date="2026-01-18")
+
+ユーザー: 「トヨタの2024年1月以降の有報を探して」
+→ search_documents(edinet_code="E02144", doc_type_codes=["120"], start_date="2024-01-01", end_date="2026-01-18")
+```
+
+**依存関係**:
+- `LLMProvider`: LLMモデル呼び出し
+- `search_documents`, `search_company` 等のLangChainツール
+
+**出力スキーマ**:
+```python
+class DocumentResultMetadata(BaseModel):
+    """分析対象書類のメタデータ"""
+    doc_id: str                          # 書類ID（S100XXXX形式）
+    filer_name: str | None               # 企業名
+    doc_description: str | None          # 書類タイトル
+    period_start: str | None             # 対象期間開始日（YYYY-MM-DD）
+    period_end: str | None               # 対象期間終了日（YYYY-MM-DD）
+
+class OrchestratorResult(BaseModel):
+    """オーケストレーター結果"""
+    query: str                           # 元のクエリ
+    intent: str                          # 判定された意図（検索/分析/比較/要約）
+    result: Any                          # 処理結果
+    tools_used: list[str]                # 使用したツール
+    documents: list[DocumentResultMetadata]  # 分析対象書類のメタデータ
+```
+
+**メタデータ連携**:
+
+`search_documents` で取得した書類メタデータを `analyze_document` に渡すことで、
+分析結果にメタデータが含まれる。これにより、どの企業のどの期間の有報を分析したか明確になる。
+
+```python
+# analyze_document のメタデータパラメータ
+await analyze_document(
+    doc_id="S100XXXX",
+    filer_name="ソフトバンクグループ株式会社",
+    doc_description="有価証券報告書－第45期(2024/04/01－2025/03/31)",
+    period_start="2024-04-01",
+    period_end="2025-03-31",
+)
+
+# 結果
+result.documents
+# → [DocumentResultMetadata(
+#     doc_id="S100XXXX",
+#     filer_name="ソフトバンクグループ株式会社",
+#     doc_description="有価証券報告書－第45期(2024/04/01－2025/03/31)",
+#     period_start="2024-04-01",
+#     period_end="2025-03-31"
+# )]
+```
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/orchestrator/query_orchestrator.py`, `src/company_research_agent/prompts/orchestrator_system.py`)
 
 ### LLMProvider（マルチLLMプロバイダー）
 
@@ -1557,11 +1660,24 @@ class AnalysisNode(ABC, Generic[T]):
         ...
 
     async def __call__(self, state: AnalysisState) -> dict:
-        """LangGraphから呼び出されるエントリーポイント"""
+        """LangGraphから呼び出されるエントリーポイント
+
+        各ノードの開始/完了時にプログレスログを出力する。
+        """
+        from company_research_agent.core.progress import (
+            print_node_start,
+            print_node_complete,
+        )
+
+        print_node_start(self.name)  # 「▷ ノード: xxx を実行中...」
         try:
             result = await self.execute(state)
-            return self._update_state(state, result)
+            update = self._update_state(state, result)
+            update.setdefault("completed_nodes", []).append(self.name)
+            print_node_complete(self.name, success=True)  # 「✓ ノード: xxx 完了」
+            return update
         except Exception as e:
+            print_node_complete(self.name, success=False)  # 「✗ ノード: xxx 失敗」
             return self._handle_error(state, e)
 
     @abstractmethod
@@ -1574,6 +1690,20 @@ class AnalysisNode(ABC, Generic[T]):
         errors = state.get("errors", [])
         errors.append(f"{self.name}: {str(error)}")
         return {"errors": errors}
+```
+
+**ログ出力関数** (`src/company_research_agent/core/progress.py`):
+```python
+def print_node_start(node_name: str) -> None:
+    """グラフノード開始ログ（インデント付き、dim表示）"""
+    console.print(f"  [dim]▷[/dim] ノード: {node_name} を実行中...")
+
+def print_node_complete(node_name: str, success: bool = True) -> None:
+    """グラフノード完了ログ（インデント付き）"""
+    if success:
+        console.print(f"  [green]✓[/green] ノード: {node_name} 完了")
+    else:
+        console.print(f"  [red]✗[/red] ノード: {node_name} 失敗")
 ```
 
 ### グラフ構築
@@ -1714,6 +1844,6 @@ src/company_research_agent/
 ---
 
 **作成日**: 2026年1月16日
-**更新日**: 2026年1月17日
-**バージョン**: 1.2
-**ステータス**: 実装完了（LLMマルチプロバイダー対応）
+**更新日**: 2026年1月18日
+**バージョン**: 1.5
+**ステータス**: 実装完了（ノード実行ログ、OrchestratorResultメタデータ追加）

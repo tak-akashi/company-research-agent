@@ -86,6 +86,22 @@ class Summary(BaseModel):
     summary_text: str = Field(description="要約テキスト")
 
 
+class DocumentResultMetadata(BaseModel):
+    """分析対象書類のメタデータ.
+
+    分析結果に含まれる書類の識別情報。
+    """
+
+    doc_id: str = Field(description="書類ID（S100XXXX形式）")
+    filer_name: str | None = Field(default=None, description="企業名")
+    doc_description: str | None = Field(
+        default=None,
+        description="書類タイトル（例: 有価証券報告書－第45期(2024/04/01－2025/03/31)）",
+    )
+    period_start: str | None = Field(default=None, description="対象期間開始日（YYYY-MM-DD）")
+    period_end: str | None = Field(default=None, description="対象期間終了日（YYYY-MM-DD）")
+
+
 class OrchestratorResult(BaseModel):
     """オーケストレーター結果.
 
@@ -96,3 +112,7 @@ class OrchestratorResult(BaseModel):
     intent: str = Field(description="判定された意図（検索/分析/比較/要約）")
     result: Any = Field(description="処理結果")
     tools_used: list[str] = Field(default_factory=list, description="使用したツール")
+    documents: list[DocumentResultMetadata] = Field(
+        default_factory=list,
+        description="分析対象書類のメタデータ",
+    )

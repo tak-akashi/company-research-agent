@@ -1,7 +1,11 @@
 # Company Research Agent
 
 AI-powered Corporate Research Agent - 企業情報収集・分析エージェント
-EDINETや企業ホームページを検索してその結果をまとめるエージェントの構築プロジェクト（構築中）
+EDINETや企業ホームページを検索してその結果をまとめるエージェントの構築プロジェクト（開発中）
+
+
+
+
 
 ## アーキテクチャ
 
@@ -233,6 +237,58 @@ graph TD
 | `analyze_document` | AnalysisGraphによる詳細分析 | doc_id | ComprehensiveReport |
 | `compare_documents` | 複数書類の比較分析 | doc_ids, aspects | ComparisonReport |
 | `summarize_document` | 書類要約 | doc_id, focus | Summary |
+
+## 開発状況
+
+### フェーズ概要
+
+本プロジェクトは段階的なフェーズアプローチで開発を進めています。
+
+| フェーズ | タイトル | ステータス | 説明 |
+|---------|---------|----------|------|
+| 1 | EDINET API連携 | ✅ 完了 | 書類一覧取得、ダウンロード、リトライ処理 |
+| 2 | PDF解析 | ✅ 完了 | pymupdf4llm/yomitoku/Geminiによるマルチ戦略解析 |
+| 3 | LLM分析 | ✅ 完了 | LangGraphワークフローによる並列分析パイプライン |
+| 3.5 | 自然言語検索 | ✅ 完了 | ReActエージェントによるクエリ処理 |
+| 4 | XBRL解析 | 🔄 進行中 | 財務三表の主要項目抽出（edinet-xbrl） |
+| 5 | 統合・検証 | ⏳ 計画中 | 10社テストデータでの検証、PostgreSQL保存 |
+| 6 | 機能拡充 | ⏳ 計画中 | 財務指標計算、日次バッチ処理 |
+| P1 | 情報源拡張 | ⏳ 計画中 | ベクトル検索、企業ホームページ取得 |
+
+### 将来の拡張予定
+
+メインフェーズ完了後、以下の機能拡張を予定しています：
+
+- **企業ホームページ検索**: IR情報、プレスリリース、製品情報の自動収集
+- **ベクトル検索**: 過去の分析結果や書類内容のセマンティック検索
+- **TDnet連携**: 適時開示情報の取得・分析
+
+### 現在の実装状況
+
+フェーズ3.5まで完了し、以下の機能が利用可能です：
+
+- **情報収集**: EDINET APIからの書類検索・ダウンロード
+- **PDF解析**: 段階的戦略による効率的なマークダウン変換
+- **LLM分析**: 事業要約、リスク抽出、財務分析、前期比較
+- **自然言語クエリ**: 「トヨタの有報を分析して」のような自然文での操作
+
+### 実装済みコンポーネント
+
+| コンポーネント | ステータス | 説明 |
+|---------------|----------|------|
+| clients/ | ✅ | EDINET/Gemini/Visionクライアント |
+| parsers/ | ✅ | PDF解析（3戦略フォールバック） |
+| services/ | ✅ | ドキュメント検索・キャッシュ |
+| tools/ | ✅ | LangChainツール（6種） |
+| llm/ | ✅ | OpenAI/Google/Anthropic/Ollama対応 |
+| workflows/ | ✅ | LangGraph並列分析ワークフロー |
+| orchestrator/ | ✅ | ReActエージェント |
+| schemas/ | ✅ | Pydanticスキーマ |
+| prompts/ | ✅ | LLMプロンプト |
+| core/ | ✅ | 基盤機能 |
+| api/ | ⏳ | REST API（計画中） |
+| repositories/ | ⏳ | データアクセス層（計画中） |
+| models/ | ⏳ | SQLAlchemyモデル（計画中） |
 
 ## セットアップ
 

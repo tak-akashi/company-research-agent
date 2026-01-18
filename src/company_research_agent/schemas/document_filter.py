@@ -2,6 +2,19 @@
 
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
+
+
+class SearchOrder(str, Enum):
+    """Search order for document search.
+
+    Attributes:
+        NEWEST_FIRST: Search from today to the past (newest documents first).
+        OLDEST_FIRST: Search from the past to today (oldest documents first).
+    """
+
+    NEWEST_FIRST = "newest_first"
+    OLDEST_FIRST = "oldest_first"
 
 
 @dataclass
@@ -22,6 +35,11 @@ class DocumentFilter:
             - "180": Extraordinary report (臨時報告書)
         start_date: Start date for search period (inclusive).
         end_date: End date for search period (inclusive).
+        search_order: Order of date iteration during search.
+            NEWEST_FIRST (default): Search from end_date to start_date.
+            OLDEST_FIRST: Search from start_date to end_date.
+        max_documents: Maximum number of documents to return.
+            When specified, search stops early once this limit is reached.
 
     Example:
         # Search for Toyota's annual reports in 2024
@@ -39,3 +57,5 @@ class DocumentFilter:
     doc_type_codes: list[str] | None = None
     start_date: date | None = None
     end_date: date | None = None
+    search_order: SearchOrder = SearchOrder.NEWEST_FIRST
+    max_documents: int | None = None

@@ -84,7 +84,7 @@ class TestAnalyzeDocument:
     async def test_analyze_document_returns_report(
         self, sample_comprehensive_report: ComprehensiveReport
     ) -> None:
-        """analyze_document should return comprehensive report."""
+        """analyze_document should return comprehensive report with metadata."""
         mock_graph = MagicMock()
         mock_graph.run_full_analysis = AsyncMock(
             return_value={"comprehensive_report": sample_comprehensive_report}
@@ -97,8 +97,12 @@ class TestAnalyzeDocument:
 
             result = await analyze_document.ainvoke({"doc_id": "S100ABCD"})
 
-            assert isinstance(result, ComprehensiveReport)
-            assert "トヨタ自動車" in result.executive_summary
+            assert isinstance(result, dict)
+            assert "report" in result
+            assert "metadata" in result
+            assert isinstance(result["report"], ComprehensiveReport)
+            assert "トヨタ自動車" in result["report"].executive_summary
+            assert result["metadata"]["doc_id"] == "S100ABCD"
             mock_graph.run_full_analysis.assert_called_once_with("S100ABCD", None)
 
     @pytest.mark.asyncio
@@ -170,3 +174,136 @@ class TestAnalyzeDocument:
             await analyze_document.ainvoke({"doc_id": "S100ABCD"})
 
             mock_graph_class.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_analyze_document_metadata_contains_filer_name(
+        self, sample_comprehensive_report: ComprehensiveReport
+    ) -> None:
+        """analyze_document metadata should contain filer_name when provided."""
+        mock_graph = MagicMock()
+        mock_graph.run_full_analysis = AsyncMock(
+            return_value={"comprehensive_report": sample_comprehensive_report}
+        )
+
+        with patch(
+            "company_research_agent.tools.analyze_document.AnalysisGraph"
+        ) as mock_graph_class:
+            mock_graph_class.return_value = mock_graph
+
+            result = await analyze_document.ainvoke(
+                {
+                    "doc_id": "S100ABCD",
+                    "filer_name": "ソフトバンクグループ株式会社",
+                }
+            )
+
+            assert result["metadata"]["filer_name"] == "ソフトバンクグループ株式会社"
+
+    @pytest.mark.asyncio
+    async def test_analyze_document_metadata_contains_doc_description(
+        self, sample_comprehensive_report: ComprehensiveReport
+    ) -> None:
+        """analyze_document metadata should contain doc_description when provided."""
+        mock_graph = MagicMock()
+        mock_graph.run_full_analysis = AsyncMock(
+            return_value={"comprehensive_report": sample_comprehensive_report}
+        )
+
+        with patch(
+            "company_research_agent.tools.analyze_document.AnalysisGraph"
+        ) as mock_graph_class:
+            mock_graph_class.return_value = mock_graph
+
+            result = await analyze_document.ainvoke(
+                {
+                    "doc_id": "S100ABCD",
+                    "doc_description": "有価証券報告書－第45期(2024/04/01－2025/03/31)",
+                }
+            )
+
+            assert (
+                result["metadata"]["doc_description"]
+                == "有価証券報告書－第45期(2024/04/01－2025/03/31)"
+            )
+
+    @pytest.mark.asyncio
+    async def test_analyze_document_metadata_contains_period(
+        self, sample_comprehensive_report: ComprehensiveReport
+    ) -> None:
+        """analyze_document metadata should contain period_start and period_end."""
+        mock_graph = MagicMock()
+        mock_graph.run_full_analysis = AsyncMock(
+            return_value={"comprehensive_report": sample_comprehensive_report}
+        )
+
+        with patch(
+            "company_research_agent.tools.analyze_document.AnalysisGraph"
+        ) as mock_graph_class:
+            mock_graph_class.return_value = mock_graph
+
+            result = await analyze_document.ainvoke(
+                {
+                    "doc_id": "S100ABCD",
+                    "period_start": "2024-04-01",
+                    "period_end": "2025-03-31",
+                }
+            )
+
+            assert result["metadata"]["period_start"] == "2024-04-01"
+            assert result["metadata"]["period_end"] == "2025-03-31"
+
+    @pytest.mark.asyncio
+    async def test_analyze_document_metadata_all_fields(
+        self, sample_comprehensive_report: ComprehensiveReport
+    ) -> None:
+        """analyze_document should return all metadata fields when provided."""
+        mock_graph = MagicMock()
+        mock_graph.run_full_analysis = AsyncMock(
+            return_value={"comprehensive_report": sample_comprehensive_report}
+        )
+
+        with patch(
+            "company_research_agent.tools.analyze_document.AnalysisGraph"
+        ) as mock_graph_class:
+            mock_graph_class.return_value = mock_graph
+
+            result = await analyze_document.ainvoke(
+                {
+                    "doc_id": "S100WXYZ",
+                    "filer_name": "任天堂株式会社",
+                    "doc_description": "有価証券報告書－第85期(2024/04/01－2025/03/31)",
+                    "period_start": "2024-04-01",
+                    "period_end": "2025-03-31",
+                }
+            )
+
+            metadata = result["metadata"]
+            assert metadata["doc_id"] == "S100WXYZ"
+            assert metadata["filer_name"] == "任天堂株式会社"
+            assert metadata["doc_description"] == "有価証券報告書－第85期(2024/04/01－2025/03/31)"
+            assert metadata["period_start"] == "2024-04-01"
+            assert metadata["period_end"] == "2025-03-31"
+
+    @pytest.mark.asyncio
+    async def test_analyze_document_metadata_none_when_not_provided(
+        self, sample_comprehensive_report: ComprehensiveReport
+    ) -> None:
+        """analyze_document metadata fields should be None when not provided."""
+        mock_graph = MagicMock()
+        mock_graph.run_full_analysis = AsyncMock(
+            return_value={"comprehensive_report": sample_comprehensive_report}
+        )
+
+        with patch(
+            "company_research_agent.tools.analyze_document.AnalysisGraph"
+        ) as mock_graph_class:
+            mock_graph_class.return_value = mock_graph
+
+            result = await analyze_document.ainvoke({"doc_id": "S100ABCD"})
+
+            metadata = result["metadata"]
+            assert metadata["doc_id"] == "S100ABCD"
+            assert metadata["filer_name"] is None
+            assert metadata["doc_description"] is None
+            assert metadata["period_start"] is None
+            assert metadata["period_end"] is None

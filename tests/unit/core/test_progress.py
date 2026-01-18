@@ -12,6 +12,8 @@ from company_research_agent.core.progress import (
     create_progress,
     print_error,
     print_info,
+    print_node_complete,
+    print_node_start,
     print_status,
     print_success,
     print_warning,
@@ -105,6 +107,61 @@ class TestPrintFunctions:
             print_info("3件の書類が見つかりました")
             result = output.getvalue()
             assert "3件の書類が見つかりました" in result
+        finally:
+            progress.console = original_console
+
+    def test_print_node_start_outputs_message(self) -> None:
+        """print_node_start should output node name with dimmed arrow."""
+        output = StringIO()
+        test_console = Console(file=output, force_terminal=True)
+
+        from company_research_agent.core import progress
+
+        original_console = progress.console
+        progress.console = test_console
+
+        try:
+            print_node_start("edinet")
+            result = output.getvalue()
+            assert "edinet" in result
+            assert "実行中" in result
+            assert "▷" in result  # Dimmed arrow icon
+        finally:
+            progress.console = original_console
+
+    def test_print_node_complete_success_outputs_message(self) -> None:
+        """print_node_complete should output success message with green checkmark."""
+        output = StringIO()
+        test_console = Console(file=output, force_terminal=True)
+
+        from company_research_agent.core import progress
+
+        original_console = progress.console
+        progress.console = test_console
+
+        try:
+            print_node_complete("pdf_parse", success=True)
+            result = output.getvalue()
+            assert "pdf_parse" in result
+            assert "完了" in result
+        finally:
+            progress.console = original_console
+
+    def test_print_node_complete_failure_outputs_message(self) -> None:
+        """print_node_complete should output failure message with red cross."""
+        output = StringIO()
+        test_console = Console(file=output, force_terminal=True)
+
+        from company_research_agent.core import progress
+
+        original_console = progress.console
+        progress.console = test_console
+
+        try:
+            print_node_complete("business_summary", success=False)
+            result = output.getvalue()
+            assert "business_summary" in result
+            assert "失敗" in result
         finally:
             progress.console = original_console
 

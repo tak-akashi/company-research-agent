@@ -10,8 +10,43 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-# Global console instance
-console = Console()
+
+def _is_jupyter() -> bool:
+    """Detect if running in a Jupyter notebook environment.
+
+    Returns:
+        True if running in Jupyter (ZMQInteractiveShell), False otherwise.
+    """
+    try:
+        from IPython import get_ipython  # type: ignore[attr-defined]
+
+        shell = get_ipython()  # type: ignore[no-untyped-call]
+        if shell is None:
+            return False
+        # ZMQInteractiveShell is used in Jupyter notebooks
+        return bool(shell.__class__.__name__ == "ZMQInteractiveShell")
+    except ImportError:
+        return False
+
+
+def _create_console() -> Console:
+    """Create a Console instance configured for the current environment.
+
+    In Jupyter environments, we disable the terminal features to avoid
+    output interleaving issues with logging.
+
+    Returns:
+        Configured Console instance.
+    """
+    if _is_jupyter():
+        # In Jupyter, use force_terminal=False to avoid ANSI escape sequences
+        # and set force_jupyter=True to use Jupyter-specific rendering
+        return Console(force_terminal=False, force_jupyter=True)
+    return Console()
+
+
+# Global console instance (configured for the current environment)
+console = _create_console()
 
 
 def print_status(message: str) -> None:
@@ -72,6 +107,38 @@ def print_info(message: str) -> None:
         >>> print_info("3件の書類が見つかりました")
     """
     console.print(f"[bold cyan]ℹ[/bold cyan] {message}")
+
+
+def print_node_start(node_name: str) -> None:
+    """Print a graph node start message (dimmed arrow, indented).
+
+    Args:
+        node_name: Name of the graph node starting execution.
+
+    Example:
+        >>> print_node_start("edinet")
+        # Output: "  ▷ ノード: edinet を実行中..."
+    """
+    console.print(f"  [dim]▷[/dim] ノード: {node_name} を実行中...")
+
+
+def print_node_complete(node_name: str, success: bool = True) -> None:
+    """Print a graph node completion message (indented).
+
+    Args:
+        node_name: Name of the graph node that completed.
+        success: Whether the node completed successfully.
+
+    Example:
+        >>> print_node_complete("edinet", success=True)
+        # Output: "  ✓ ノード: edinet 完了"
+        >>> print_node_complete("edinet", success=False)
+        # Output: "  ✗ ノード: edinet 失敗"
+    """
+    if success:
+        console.print(f"  [green]✓[/green] ノード: {node_name} 完了")
+    else:
+        console.print(f"  [red]✗[/red] ノード: {node_name} 失敗")
 
 
 def create_progress() -> Progress:

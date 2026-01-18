@@ -13,7 +13,10 @@ from langgraph.prebuilt import create_react_agent
 
 from company_research_agent.llm.factory import get_default_provider
 from company_research_agent.prompts.orchestrator_system import ORCHESTRATOR_SYSTEM_PROMPT
-from company_research_agent.schemas.query_schemas import OrchestratorResult
+from company_research_agent.schemas.query_schemas import (
+    DocumentResultMetadata,
+    OrchestratorResult,
+)
 from company_research_agent.tools import (
     analyze_document,
     compare_documents,
@@ -148,11 +151,15 @@ class QueryOrchestrator:
             if hasattr(last_msg, "content"):
                 final_result = last_msg.content
 
+        # ドキュメントメタデータを抽出
+        documents = self._extract_document_metadata(messages)
+
         return OrchestratorResult(
             query=query,
             intent=intent,
             result=final_result,
             tools_used=tools_used,
+            documents=documents,
         )
 
     def _infer_intent(self, tools_used: list[str]) -> str:
@@ -175,3 +182,37 @@ class QueryOrchestrator:
         if "search_documents" in tools_used or "search_company" in tools_used:
             return "検索"
         return "その他"
+
+    def _extract_document_metadata(self, messages: list[Any]) -> list[DocumentResultMetadata]:
+        """ツールメッセージからドキュメントメタデータを抽出する.
+
+        analyze_documentツールの結果からメタデータを抽出し、
+        DocumentResultMetadataのリストとして返す。
+
+        Args:
+            messages: エージェントのメッセージリスト
+
+        Returns:
+            抽出されたドキュメントメタデータのリスト
+        """
+        documents: list[DocumentResultMetadata] = []
+
+        for msg in messages:
+            # ToolMessageの場合、contentがdictでmetadataを含む可能性がある
+            if hasattr(msg, "content"):
+                content = msg.content
+                # contentがdictの場合
+                if isinstance(content, dict) and "metadata" in content:
+                    meta = content["metadata"]
+                    if isinstance(meta, dict) and meta.get("doc_id"):
+                        documents.append(
+                            DocumentResultMetadata(
+                                doc_id=meta.get("doc_id", ""),
+                                filer_name=meta.get("filer_name"),
+                                doc_description=meta.get("doc_description"),
+                                period_start=meta.get("period_start"),
+                                period_end=meta.get("period_end"),
+                            )
+                        )
+
+        return documents

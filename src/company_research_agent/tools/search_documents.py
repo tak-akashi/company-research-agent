@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 from company_research_agent.clients.edinet_client import EDINETClient
 from company_research_agent.core.config import EDINETConfig
 from company_research_agent.core.progress import print_info, print_status, print_success
-from company_research_agent.schemas.document_filter import DocumentFilter
+from company_research_agent.schemas.document_filter import DocumentFilter, SearchOrder
 from company_research_agent.schemas.edinet_schemas import DocumentMetadata
 from company_research_agent.services.edinet_document_service import EDINETDocumentService
 
@@ -52,6 +52,14 @@ async def search_documents(
         str | None,
         "検索終了日（YYYY-MM-DD形式）",
     ] = None,
+    search_order: Annotated[
+        str,
+        "検索順序（newest_first=新しい順, oldest_first=古い順）",
+    ] = "newest_first",
+    max_documents: Annotated[
+        int | None,
+        "取得する書類の最大数（指定すると早期終了する）",
+    ] = None,
 ) -> list[DocumentMetadata]:
     """EDINET書類を検索する。
 
@@ -66,22 +74,32 @@ async def search_documents(
             - 160: 臨時報告書
         start_date: 検索開始日（YYYY-MM-DD形式、省略時は終了日と同じ）
         end_date: 検索終了日（YYYY-MM-DD形式、省略時は今日）
+        search_order: 検索順序
+            - "newest_first": 最新の書類から検索（デフォルト）
+            - "oldest_first": 古い書類から検索
+        max_documents: 取得する書類の最大数（省略時は全件取得）
 
     Returns:
-        書類メタデータのリスト
+        書類メタデータのリスト（submit_date_timeの降順でソート済み）
 
     Example:
+        >>> # 最新の有報を1件だけ取得
         >>> docs = await search_documents(
         ...     edinet_code="E02144",
         ...     doc_type_codes=["120"],
-        ...     start_date="2024-01-01",
-        ...     end_date="2024-12-31",
+        ...     start_date="2020-01-01",
+        ...     search_order="newest_first",
+        ...     max_documents=1,
         ... )
     """
-    print_status(f"EDINET書類を検索中: {edinet_code}")
+    # Parse search_order string to enum
+    order = SearchOrder.NEWEST_FIRST if search_order == "newest_first" else SearchOrder.OLDEST_FIRST
+
+    print_status(f"EDINET書類を検索中: {edinet_code} ({search_order})")
     logger.info(
         f"Searching documents for {edinet_code}, "
-        f"doc_types={doc_type_codes}, start={start_date}, end={end_date}"
+        f"doc_types={doc_type_codes}, start={start_date}, end={end_date}, "
+        f"search_order={search_order}, max_documents={max_documents}"
     )
 
     doc_filter = DocumentFilter(
@@ -89,6 +107,8 @@ async def search_documents(
         doc_type_codes=doc_type_codes,
         start_date=_parse_date(start_date),
         end_date=_parse_date(end_date),
+        search_order=order,
+        max_documents=max_documents,
     )
 
     config = EDINETConfig()  # type: ignore[call-arg]

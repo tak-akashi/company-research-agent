@@ -89,6 +89,12 @@ class AnalysisNode(ABC, Generic[T]):
         Returns:
             更新するキーと値のdict
         """
+        from company_research_agent.core.progress import (
+            print_node_complete,
+            print_node_start,
+        )
+
+        print_node_start(self.name)
         logger.info(f"Starting node: {self.name}")
         try:
             result = await self.execute(state)
@@ -96,9 +102,11 @@ class AnalysisNode(ABC, Generic[T]):
             # completed_nodesにノード名を追加
             update.setdefault("completed_nodes", []).append(self.name)
             logger.info(f"Completed node: {self.name}")
+            print_node_complete(self.name, success=True)
             return update
         except Exception as e:
             logger.exception(f"Error in node {self.name}: {e}")
+            print_node_complete(self.name, success=False)
             return self._handle_error(state, e)
 
     def _handle_error(self, state: AnalysisState, error: Exception) -> dict[str, Any]:
