@@ -100,8 +100,9 @@ class TestAnalyzeDocument:
             assert isinstance(result, dict)
             assert "report" in result
             assert "metadata" in result
-            assert isinstance(result["report"], ComprehensiveReport)
-            assert "トヨタ自動車" in result["report"].executive_summary
+            # report is serialized as dict for LangChain ToolMessage compatibility
+            assert isinstance(result["report"], dict)
+            assert "トヨタ自動車" in result["report"]["executive_summary"]
             assert result["metadata"]["doc_id"] == "S100ABCD"
             mock_graph.run_full_analysis.assert_called_once_with("S100ABCD", None)
 

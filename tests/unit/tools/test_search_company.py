@@ -52,7 +52,8 @@ class TestSearchCompany:
             result = await search_company.ainvoke({"query": "トヨタ"})
 
             assert len(result) == 1
-            assert result[0].company.edinet_code == "E02144"
+            # Result is serialized as dict for LangChain ToolMessage compatibility
+            assert result[0]["company"]["edinet_code"] == "E02144"
             mock_client.search_companies.assert_called_once_with("トヨタ", 10)
 
     @pytest.mark.asyncio

@@ -324,13 +324,19 @@ class TestPDFParserGeminiStrategy:
         mock_pdf_path: Path,
         mock_pdfplumber_pdf: MagicMock,
     ) -> None:
-        """to_markdown with gemini should raise PDFParseError if no config."""
+        """to_markdown with gemini should raise error if API key is missing."""
         with patch("pdfplumber.open") as mock_pdfplumber:
             mock_pdfplumber.return_value.__enter__.return_value = mock_pdfplumber_pdf
 
-            parser = PDFParser()  # No vision_provider
-            with pytest.raises(PDFParseError) as exc_info:
-                parser.to_markdown(mock_pdf_path, strategy="gemini")
+            # Mock create_llm_provider to simulate missing API key
+            with patch("company_research_agent.llm.factory.create_llm_provider") as mock_create:
+                mock_create.side_effect = ValueError(
+                    "GOOGLE_API_KEY is required for Google provider"
+                )
+
+                parser = PDFParser()  # No vision_provider
+                with pytest.raises((PDFParseError, ValueError)) as exc_info:
+                    parser.to_markdown(mock_pdf_path, strategy="gemini")
 
         # Should fail due to missing API key
         assert "GOOGLE_API_KEY" in str(exc_info.value) or "API key" in str(exc_info.value)
