@@ -1,0 +1,24 @@
+# 株式会社セルシス IRテンプレート
+company:
+  sec_code: '36630'
+  name: 株式会社セルシス
+  edinet_code: E26231
+ir_page:
+  base_url: https://www.celsys.com/irinfo/
+  sections:
+    disclosures:
+      url: /irinfo/
+      selector: ul.irnews li a[href$=".pdf"]
+      link_pattern: .*\.pdf$
+      date_selector: ul.irnews li time
+      date_format: '%Y-%m-%d'
+    earnings:
+      url: .
+      selector: ul.irnews li a[href$=".pdf"]
+      date_selector: time
+      date_format: '%Y-%m-%d'
+    news:
+      url: /irinfo_news/contents_type=46
+      selector: ul.irnews li a[href$=".pdf"]
+      date_selector: time
+      date_format: '%Y.%m.%d'

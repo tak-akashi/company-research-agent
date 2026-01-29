@@ -68,7 +68,7 @@ class GeminiClient:
 
             self._model = ChatGoogleGenerativeAI(
                 model=self._config.model,
-                google_api_key=self._config.api_key,
+                google_api_key=self._config.google_api_key,
                 timeout=self._config.timeout,
                 max_retries=self._config.max_retries,
             )

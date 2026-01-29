@@ -31,7 +31,17 @@ class TestCreateParser:
                 break
 
         assert subparsers_action is not None
-        expected_commands = {"search", "list", "download", "markdown", "query", "chat", "cache"}
+        expected_commands = {
+            "search",
+            "list",
+            "download",
+            "markdown",
+            "query",
+            "chat",
+            "cache",
+            "ir-fetch",
+            "ir-template",
+        }
         assert set(subparsers_action.choices.keys()) == expected_commands
 
 

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Literal
 from company_research_agent.cli.commands.cache import cmd_cache
 from company_research_agent.cli.commands.chat import cmd_chat
 from company_research_agent.cli.commands.download import cmd_download
+from company_research_agent.cli.commands.ir_fetch import cmd_ir_fetch
+from company_research_agent.cli.commands.ir_template import cmd_ir_template
 from company_research_agent.cli.commands.list import cmd_list
 from company_research_agent.cli.commands.markdown import cmd_markdown
 from company_research_agent.cli.commands.query import cmd_query
@@ -51,6 +53,16 @@ def create_parser() -> argparse.ArgumentParser:
     cra cache --stats
     cra cache --list --sec-code 72030
 
+  IR資料取得:
+    cra ir-fetch --sec-code 72030
+    cra ir-fetch --url "https://example.com/ir/"
+    cra ir-fetch --all
+
+  IRテンプレート管理:
+    cra ir-template list
+    cra ir-template create --sec-code 72030 --ir-url "https://..." --company-name "トヨタ" --save
+    cra ir-template validate --sec-code 72030
+
   デバッグモード:
     cra -v list --sec-code 72030
     LOG_LEVEL=DEBUG cra list --sec-code 72030
@@ -71,6 +83,8 @@ def create_parser() -> argparse.ArgumentParser:
     _create_query_parser(subparsers)
     _create_chat_parser(subparsers)
     _create_cache_parser(subparsers)
+    _create_ir_fetch_parser(subparsers)
+    _create_ir_template_parser(subparsers)
 
     return parser
 
@@ -173,6 +187,90 @@ def _create_cache_parser(subparsers: argparse._SubParsersAction) -> None:  # typ
     cache_parser.add_argument("--limit", "-l", type=int, help="表示件数")
 
 
+def _create_ir_fetch_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """ir-fetchサブコマンドを定義."""
+    ir_parser = subparsers.add_parser(
+        "ir-fetch",
+        help="IR資料取得",
+        description="企業のIRページからIR資料を取得して要約します",
+    )
+    ir_parser.add_argument("--sec-code", "-s", type=str, help="証券コード（5桁）")
+    ir_parser.add_argument("--url", "-u", type=str, help="IRページのURL（アドホック探索）")
+    ir_parser.add_argument("--all", "-a", action="store_true", help="全登録企業を処理")
+    ir_parser.add_argument(
+        "--category",
+        "-c",
+        type=str,
+        choices=["earnings", "news", "disclosures"],
+        help="取得カテゴリ（earnings=決算, news=ニュース, disclosures=開示）",
+    )
+    ir_parser.add_argument(
+        "--since",
+        type=str,
+        help="検索開始日（YYYY-MM-DD形式、デフォルト: 3ヶ月前）",
+    )
+    ir_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="既存ファイルを上書き",
+    )
+
+
+def _create_ir_template_parser(subparsers: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """ir-templateサブコマンドを定義."""
+    ir_template_parser = subparsers.add_parser(
+        "ir-template",
+        help="IRテンプレート管理",
+        description="IRスクレイピング用テンプレートの作成・管理を行います",
+    )
+    ir_template_parser.add_argument(
+        "action",
+        choices=["create", "list", "validate"],
+        help="アクション（create=作成, list=一覧, validate=検証）",
+    )
+    ir_template_parser.add_argument(
+        "--sec-code",
+        "-s",
+        type=str,
+        help="証券コード（5桁）",
+    )
+    ir_template_parser.add_argument(
+        "--company-name",
+        "-n",
+        type=str,
+        help="企業名（省略時はEDINETコードリストから自動取得）",
+    )
+    ir_template_parser.add_argument(
+        "--ir-url",
+        "-u",
+        type=str,
+        help="IRページのURL",
+    )
+    ir_template_parser.add_argument(
+        "--edinet-code",
+        "-e",
+        type=str,
+        help="EDINETコード（オプション）",
+    )
+    ir_template_parser.add_argument(
+        "--save",
+        action="store_true",
+        help="生成したテンプレートを保存",
+    )
+    ir_template_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="既存ファイルを上書き",
+    )
+    ir_template_parser.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="検証をスキップ",
+    )
+
+
 async def run(args: argparse.Namespace) -> int:
     """コマンドをディスパッチして実行.
 
@@ -193,9 +291,14 @@ async def run(args: argparse.Namespace) -> int:
         return await cmd_chat(args)
     elif args.command == "cache":
         return await cmd_cache(args)
+    elif args.command == "ir-fetch":
+        return await cmd_ir_fetch(args)
+    elif args.command == "ir-template":
+        return await cmd_ir_template(args)
     else:
         print("使用方法: cra <command> [options]")
-        print("  commands: search, list, download, markdown, query, chat, cache")
+        print("  commands: search, list, download, markdown, query, chat,")
+        print("            cache, ir-fetch, ir-template")
         print("  詳細は --help を参照してください")
         return 1
 

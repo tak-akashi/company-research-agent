@@ -1,0 +1,17 @@
+# トヨタ自動車 IRテンプレート
+company:
+  sec_code: "72030"
+  name: "トヨタ自動車"
+  edinet_code: "E02144"
+
+ir_page:
+  base_url: "https://global.toyota/jp/ir/"
+  sections:
+    earnings:
+      url: "financial-results/"
+      selector: "a[href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'
+    disclosures:
+      url: "library/securities-report/"
+      selector: "a[href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'

@@ -1,0 +1,21 @@
+# ソニーグループ IRテンプレート
+company:
+  sec_code: "67580"
+  name: "ソニーグループ"
+  edinet_code: "E01777"
+
+ir_page:
+  base_url: "https://www.sony.com/ja/SonyInfo/IR/"
+  sections:
+    earnings:
+      url: ""
+      selector: "a[href*='library/presen/er/'][href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'
+    news:
+      url: ""
+      selector: "a[href*='news/'][href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'
+    disclosures:
+      url: ""
+      selector: "a[href*='library/'][href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'

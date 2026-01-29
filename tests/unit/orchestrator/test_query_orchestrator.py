@@ -21,7 +21,7 @@ class TestQueryOrchestratorInit:
             orchestrator = QueryOrchestrator()
 
             assert orchestrator._llm_provider == mock_provider
-            assert len(orchestrator._tools) == 6  # 6 default tools
+            assert len(orchestrator._tools) == 9  # 9 default tools (6 base + 3 IR tools)
             assert orchestrator._agent is None
 
     def test_init_custom_provider(self) -> None:
@@ -37,19 +37,24 @@ class TestDefaultTools:
     """Tests for default tools."""
 
     def test_default_tools_list(self) -> None:
-        """Should return 6 default tools."""
+        """Should return 9 default tools."""
         with patch("company_research_agent.orchestrator.query_orchestrator.get_default_provider"):
             orchestrator = QueryOrchestrator()
             tools = orchestrator._default_tools()
 
-            assert len(tools) == 6
+            assert len(tools) == 9  # 6 base + 3 IR tools
             tool_names = [t.name for t in tools]
+            # Base tools
             assert "search_company" in tool_names
             assert "search_documents" in tool_names
             assert "download_document" in tool_names
             assert "analyze_document" in tool_names
             assert "compare_documents" in tool_names
             assert "summarize_document" in tool_names
+            # IR tools
+            assert "fetch_ir_documents" in tool_names
+            assert "fetch_ir_news" in tool_names
+            assert "explore_ir_page" in tool_names
 
 
 class TestInferIntent:

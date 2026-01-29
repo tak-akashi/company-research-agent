@@ -320,8 +320,40 @@ class EDINETCodeListClient:
                     )
                 )
 
-        # スコア降順でソートして上位を返す
-        candidates.sort(key=lambda c: c.similarity_score, reverse=True)
+        # スコア降順でソート（同スコアの場合は追加条件で優先度を決定）
+        # 優先順位:
+        # 1. 類似度スコア
+        # 2. 企業名がクエリで始まる（プレフィックスマッチ、法人格除去後）
+        # 3. 上場企業（sec_code がある）
+        # 4. 業種を示す一般的な単語を含む（自動車、電機など主要企業の可能性）
+        major_industry_keywords = (
+            "自動車",
+            "電機",
+            "電器",
+            "製薬",
+            "銀行",
+            "証券",
+            "保険",
+            "製作所",
+        )
+        legal_prefixes = ("株式会社", "有限会社", "合同会社", "合資会社", "合名会社")
+
+        def normalize_name(name: str) -> str:
+            """法人格を除去した企業名を返す."""
+            for prefix in legal_prefixes:
+                if name.startswith(prefix):
+                    return name[len(prefix) :]
+            return name
+
+        def sort_key(c: CompanyCandidate) -> tuple[float, int, int, int]:
+            name = c.company.company_name
+            normalized = normalize_name(name)
+            is_prefix_match = 1 if (name.startswith(query) or normalized.startswith(query)) else 0
+            is_listed = 1 if c.company.sec_code else 0
+            has_major_keyword = 1 if any(kw in name for kw in major_industry_keywords) else 0
+            return (c.similarity_score, is_prefix_match, is_listed, has_major_keyword)
+
+        candidates.sort(key=sort_key, reverse=True)
         return candidates[:limit]
 
     async def get_by_edinet_code(self, code: str) -> CompanyInfo | None:

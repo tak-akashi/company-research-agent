@@ -33,6 +33,11 @@ def print_info(message: str) -> None:
     print(f"[INFO] {message}")
 
 
+def print_warning(message: str) -> None:
+    """警告メッセージを表示."""
+    print(f"[WARN] {message}")
+
+
 def print_company_info(company: CompanyInfo) -> None:
     """企業情報の詳細を表示."""
     print(f"企業名: {company.company_name}")

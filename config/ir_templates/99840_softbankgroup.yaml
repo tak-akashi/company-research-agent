@@ -1,0 +1,17 @@
+# ソフトバンクグループ IRテンプレート
+company:
+  sec_code: "99840"
+  name: "ソフトバンクグループ"
+  edinet_code: "E02778"
+
+ir_page:
+  base_url: "https://group.softbank/ir"
+  sections:
+    earnings:
+      url: ""
+      selector: "a[href*='/pdf/ir/'][href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'
+    disclosures:
+      url: ""
+      selector: "a[href*='/pdf/ir/financials/'][href$='.pdf']"
+      link_pattern: '.*\.(pdf|PDF)$'
