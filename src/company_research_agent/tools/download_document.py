@@ -37,7 +37,7 @@ async def download_document(
     既にダウンロード済みの場合は、既存のファイルパスを返す（キャッシュ優先）。
 
     ダウンロード先は階層構造:
-    downloads/{sec_code}_{filer_name}/{doc_type_code}_{doc_type_name}/{YYYYMM}/{doc_id}.pdf
+    downloads/{sec_code}_{filer_name}/edinet/{doc_type_code}_{doc_type_name}/{YYYYMM}/{doc_id}.pdf
 
     Args:
         doc_id: 書類ID（S100XXXX形式）
@@ -58,7 +58,7 @@ async def download_document(
         ...     period_end="2025-03-31",
         ... )
         >>> print(pdf_path)
-        "downloads/72030_トヨタ自動車株式会社/120_有価証券報告書/202503/S100ABCD.pdf"
+        "downloads/72030_トヨタ自動車株式会社/edinet/120_有価証券報告書/202503/S100ABCD.pdf"
     """
     print_status(f"書類を検索中: {doc_id}")
     logger.info(f"Downloading document: {doc_id}")

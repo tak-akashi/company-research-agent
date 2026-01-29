@@ -12,9 +12,20 @@
 src/company_research_agent/
 ├── api/           # REST API (FastAPI)
 ├── cli/           # CLIツール (cra コマンド)
-├── clients/       # 外部APIクライアント (EDINET, Gemini)
+├── clients/       # 外部APIクライアント
+│   ├── edinet_client.py        # EDINET API
+│   ├── edinet_code_list_client.py # 企業コードリスト
+│   ├── vision_client.py        # ビジョンLLM
+│   └── ir_scraper/             # IRスクレイピング
+│       ├── base.py             # Playwright基盤
+│       ├── template_loader.py  # YAMLテンプレート
+│       ├── template_generator.py # LLMテンプレート生成
+│       └── llm_explorer.py     # LLM IRページ探索
 ├── parsers/       # XBRL/PDF解析
 ├── services/      # ビジネスロジック
+│   ├── edinet_document_service.py # EDINET書類検索
+│   ├── local_cache_service.py     # ローカルキャッシュ
+│   └── ir_scraper_service.py      # IR資料取得・要約
 ├── repositories/  # データアクセス
 ├── models/        # SQLAlchemyモデル
 ├── schemas/       # Pydanticスキーマ
@@ -195,6 +206,12 @@ graph TD
         SUMMARIZE[summarize_document<br/>書類要約]
     end
 
+    subgraph "IR系ツール"
+        IR_FETCH[fetch_ir_documents<br/>IR資料取得]
+        IR_NEWS[fetch_ir_news<br/>IRニュース取得]
+        IR_EXPLORE[explore_ir_page<br/>IRページ探索]
+    end
+
     subgraph "データソース"
         EDINET_LIST[EDINETCodeListClient<br/>企業リスト・キャッシュ]
         EDINET_API[EDINET API]
@@ -236,6 +253,9 @@ graph TD
 | `analyze_document` | AnalysisGraphによる詳細分析 | doc_id | ComprehensiveReport |
 | `compare_documents` | 複数書類の比較分析 | doc_ids, aspects | ComparisonReport |
 | `summarize_document` | 書類要約 | doc_id, focus | Summary |
+| `fetch_ir_documents` | 企業IR資料取得 | sec_code, category, since_days | IRDocument[] |
+| `fetch_ir_news` | IRニュース取得 | sec_code, since_days | IRDocument[] |
+| `explore_ir_page` | IRページ探索 | url, since_days | IRDocument[] |
 
 ## 開発状況
 
@@ -252,40 +272,43 @@ graph TD
 | 4 | XBRL解析 | 🔄 進行中 | 財務三表の主要項目抽出（edinet-xbrl） |
 | 5 | 統合・検証 | ⏳ 計画中 | 10社テストデータでの検証、PostgreSQL保存 |
 | 6 | 機能拡充 | ⏳ 計画中 | 財務指標計算、日次バッチ処理 |
-| P1 | 情報源拡張 | ⏳ 計画中 | ベクトル検索、企業ホームページ取得 |
+| P1 | IR資料取得 | ✅ 完了 | 企業IRページスクレイピング、PDF要約 |
+| P2 | 情報源拡張 | ⏳ 計画中 | ベクトル検索、TDnet連携 |
 
 ### 将来の拡張予定
 
 メインフェーズ完了後、以下の機能拡張を予定しています：
 
-- **企業ホームページ検索**: IR情報、プレスリリース、製品情報の自動収集
 - **ベクトル検索**: 過去の分析結果や書類内容のセマンティック検索
 - **TDnet連携**: 適時開示情報の取得・分析
+- **PostgreSQL統合**: 財務データの永続化と時系列分析
 
 ### 現在の実装状況
 
-フェーズ3.5まで完了し、以下の機能が利用可能です：
+フェーズ3.5およびP1（IR資料取得）まで完了し、以下の機能が利用可能です：
 
 - **情報収集**: EDINET APIからの書類検索・ダウンロード
 - **PDF解析**: 段階的戦略による効率的なマークダウン変換
 - **LLM分析**: 事業要約、リスク抽出、財務分析、前期比較
 - **自然言語クエリ**: 「トヨタの有報を分析して」のような自然文での操作
+- **IR資料取得**: 企業IRページからの決算資料・ニュースの自動取得・要約
 
 ### 実装済みコンポーネント
 
 | コンポーネント | ステータス | 説明 |
 |---------------|----------|------|
-| cli/ | ✅ | CLIツール（cra コマンド） |
-| clients/ | ✅ | EDINET/Gemini/Visionクライアント |
+| cli/ | ✅ | CLIツール（cra コマンド、IR含む） |
+| clients/ | ✅ | EDINET/Vision/IRスクレイピング |
+| clients/ir_scraper/ | ✅ | IRページスクレイピング（Playwright） |
 | parsers/ | ✅ | PDF解析（3戦略フォールバック） |
-| services/ | ✅ | ドキュメント検索・キャッシュ |
-| tools/ | ✅ | LangChainツール（6種） |
+| services/ | ✅ | ドキュメント検索・キャッシュ・IR取得 |
+| tools/ | ✅ | LangChainツール（9種、IR含む） |
 | llm/ | ✅ | OpenAI/Google/Anthropic/Ollama対応 |
 | observability/ | ✅ | Langfuse統合（LLMトレース・分析） |
 | workflows/ | ✅ | LangGraph並列分析ワークフロー |
-| orchestrator/ | ✅ | ReActエージェント |
-| schemas/ | ✅ | Pydanticスキーマ |
-| prompts/ | ✅ | LLMプロンプト |
+| orchestrator/ | ✅ | ReActエージェント（IRツール統合） |
+| schemas/ | ✅ | Pydanticスキーマ（IR含む） |
+| prompts/ | ✅ | LLMプロンプト（IR要約含む） |
 | core/ | ✅ | 基盤機能 |
 | api/ | ⏳ | REST API（計画中） |
 | repositories/ | ⏳ | データアクセス層（計画中） |
@@ -339,6 +362,12 @@ cra query "トヨタの有報を分析して"
 # 対話モード
 cra chat
 
+# IR資料取得
+cra ir-fetch --sec-code 72030 --category earnings --since 30
+cra ir-fetch --url "https://example.com/ir" --force
+cra ir-template create --sec-code 72030
+cra ir-template list
+
 # キャッシュ管理
 cra cache --stats
 cra cache --list --sec-code 72030
@@ -367,6 +396,8 @@ LOG_LEVEL=DEBUG cra list --sec-code 72030
 | `query` | 自然言語クエリ実行 |
 | `chat` | 対話モード |
 | `cache` | ダウンロード済み書類の管理 |
+| `ir-fetch` | IR資料取得・ダウンロード・要約 |
+| `ir-template` | IRスクレイピングテンプレート管理 |
 
 ### 書類種別コード
 
@@ -784,6 +815,9 @@ result = await orchestrator.process("トヨタの有報を分析して")
 | `analyze_document` | AnalysisGraphによる詳細分析 | doc_id, prior_doc_id | ComprehensiveReport |
 | `compare_documents` | 複数書類の比較分析 | doc_ids, aspects | ComparisonReport |
 | `summarize_document` | 書類要約 | doc_id, focus | Summary |
+| `fetch_ir_documents` | 企業IR資料取得 | sec_code, category, since_days | IRDocument[] |
+| `fetch_ir_news` | IRニュース取得 | sec_code, since_days | IRDocument[] |
+| `explore_ir_page` | IRページ探索 | url, since_days | IRDocument[] |
 
 ## LLMプロバイダー設定
 

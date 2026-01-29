@@ -1,29 +1,8 @@
-"""LLMプロバイダーの型定義."""
+"""LLMプロバイダーの型定義.
 
-from __future__ import annotations
+後方互換性のためのモジュール。core.typesから再エクスポートする。
+"""
 
-from enum import Enum
+from company_research_agent.core.types import LLMProviderType
 
-
-class LLMProviderType(str, Enum):
-    """LLMプロバイダーの種類.
-
-    環境変数 LLM_PROVIDER で指定可能な値。
-
-    Example:
-        >>> provider_type = LLMProviderType.GOOGLE
-        >>> provider_type.value
-        'google'
-    """
-
-    OPENAI = "openai"
-    """OpenAI API (GPT-4o, GPT-5-mini等)."""
-
-    GOOGLE = "google"
-    """Google Gemini API (Gemini 2.5 Flash, Pro等)."""
-
-    ANTHROPIC = "anthropic"
-    """Anthropic Claude API (Claude Sonnet, Opus等)."""
-
-    OLLAMA = "ollama"
-    """Ollama ローカルLLM (llama3.2, gpt-oss-20b, llava等)."""
+__all__ = ["LLMProviderType"]

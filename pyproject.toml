@@ -23,6 +23,10 @@ dependencies = [
     "rapidfuzz>=3.0.0,<4.0.0",
     "rich>=13.0.0",
     "langfuse>=3.0.0",
+    "playwright>=1.49.0",
+    "beautifulsoup4>=4.12.0",
+    "pyyaml>=6.0.0",
+    "markdownify>=0.14.0",
 ]
 
 [project.scripts]
@@ -85,6 +89,10 @@ module = [
     "langchain_anthropic.*",
     "langchain_ollama.*",
     "langfuse.*",
+    "yaml.*",
+    "markdownify.*",
+    "playwright.*",
+    "bs4.*",
 ]
 ignore_missing_imports = true
 

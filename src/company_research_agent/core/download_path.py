@@ -80,13 +80,13 @@ def build_download_path(
     period_end: str | None,
     doc_id: str,
 ) -> Path:
-    """Build hierarchical download path for a document.
+    """Build hierarchical download path for EDINET document.
 
     Creates path in format:
-    {base_dir}/{sec_code}_{filer_name}/{doc_type_code}_{doc_type_name}/{YYYYMM}/{doc_id}.pdf
+    {base_dir}/{sec_code}_{filer_name}/edinet/{doc_type_code}_{doc_type_name}/{YYYYMM}/{doc_id}.pdf
 
     If all metadata is None, uses a simplified fallback path:
-    {base_dir}/_unclassified/{doc_id}.pdf
+    {base_dir}/_unclassified/edinet/{doc_id}.pdf
 
     Args:
         base_dir: Base download directory. Defaults to "downloads".
@@ -109,7 +109,7 @@ def build_download_path(
         ...     doc_id="S100ABCD",
         ... )
         >>> str(path)
-        'downloads/72030_トヨタ自動車株式会社/120_有価証券報告書/202503/S100ABCD.pdf'
+        'downloads/72030_トヨタ自動車株式会社/edinet/120_有価証券報告書/202503/S100ABCD.pdf'
 
         >>> path = build_download_path(
         ...     base_dir=Path("downloads"),
@@ -120,14 +120,14 @@ def build_download_path(
         ...     doc_id="S100EFGH",
         ... )
         >>> str(path)
-        'downloads/_unclassified/S100EFGH.pdf'
+        'downloads/_unclassified/edinet/S100EFGH.pdf'
     """
     if base_dir is None:
         base_dir = DEFAULT_DOWNLOAD_DIR
 
     # Fallback: if all metadata is None, use simplified path
     if all(v is None for v in [sec_code, filer_name, doc_type_code, period_end]):
-        return base_dir / "_unclassified" / f"{doc_id}.pdf"
+        return base_dir / "_unclassified" / "edinet" / f"{doc_id}.pdf"
 
     # Build company folder name: {sec_code}_{filer_name}
     sec_code_safe = sec_code or "unknown"
@@ -142,8 +142,8 @@ def build_download_path(
     # Build period folder name: YYYYMM
     period_folder = parse_period_to_yyyymm(period_end)
 
-    # Construct full path
-    return base_dir / company_folder / doc_type_folder / period_folder / f"{doc_id}.pdf"
+    # Construct full path: {base_dir}/{company}/edinet/{doc_type}/{period}/{doc_id}.pdf
+    return base_dir / company_folder / "edinet" / doc_type_folder / period_folder / f"{doc_id}.pdf"
 
 
 def find_document_in_hierarchy(

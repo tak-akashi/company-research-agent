@@ -73,7 +73,9 @@ cli/
     ├── markdown.py          # PDF→マークダウン変換コマンド
     ├── query.py             # 自然言語クエリコマンド
     ├── chat.py              # 対話モードコマンド
-    └── cache.py             # キャッシュ管理コマンド
+    ├── cache.py             # キャッシュ管理コマンド
+    ├── ir_fetch.py          # IR資料取得コマンド ✅ 実装済
+    └── ir_template.py       # IRテンプレート管理コマンド ✅ 実装済
 ```
 
 #### api/
@@ -128,8 +130,15 @@ api/
 clients/
 ├── __init__.py
 ├── base_client.py               # 基底クライアント
-├── edinet_client.py             # EDINET APIクライアント
-└── gemini_client.py             # Gemini APIクライアント
+├── edinet_client.py             # EDINET APIクライアント ✅ 実装済
+├── edinet_code_list_client.py   # 企業検索（rapidfuzz） ✅ 実装済
+├── vision_client.py             # VisionLLMClient（PDF解析用） ✅ 実装済
+└── ir_scraper/                  # IRスクレイピング ✅ 実装済
+    ├── __init__.py
+    ├── base.py                  # BaseIRScraper（Playwright基盤）
+    ├── template_loader.py       # TemplateLoader（YAML読み込み・実行）
+    ├── template_generator.py    # IRTemplateGenerator（LLM自動生成）
+    └── llm_explorer.py          # LLMExplorer（LLMベース探索）
 ```
 
 #### parsers/
@@ -184,6 +193,8 @@ parsers/
 services/
 ├── __init__.py
 ├── edinet_document_service.py   # EDINET書類検索 ✅ 実装済
+├── local_cache_service.py       # ローカルキャッシュ ✅ 実装済
+├── ir_scraper_service.py        # IR資料取得・要約 ✅ 実装済
 ├── document_service.py          # 書類検索・取得
 ├── financial_analyzer.py        # 財務分析
 ├── indicator_calculator.py      # 財務指標計算
@@ -279,6 +290,8 @@ schemas/
 ├── __init__.py
 ├── edinet_schemas.py            # EDINETスキーマ ✅ 実装済
 ├── document_filter.py           # 検索フィルタ ✅ 実装済
+├── query_schemas.py             # クエリスキーマ ✅ 実装済
+├── ir_schemas.py                # IRスキーマ ✅ 実装済
 ├── document_schemas.py          # 書類スキーマ
 ├── company_schemas.py           # 企業スキーマ
 ├── financial_schemas.py         # 財務スキーマ
@@ -327,23 +340,35 @@ core/
 tests/unit/
 ├── conftest.py                  # 共通フィクスチャ
 ├── clients/
-│   └── test_edinet_client.py    # ✅ 実装済
+│   ├── test_edinet_client.py    # ✅ 実装済
+│   └── ir_scraper/              # ✅ 実装済
+│       ├── test_base.py
+│       ├── test_template_loader.py
+│       ├── test_template_generator.py
+│       └── test_llm_explorer.py
 ├── cli/
 │   ├── test_main.py             # ✅ 実装済 (パーサーテスト)
 │   ├── test_config.py           # ✅ 実装済
 │   ├── test_output.py           # ✅ 実装済
 │   ├── test_rich_output.py      # ✅ 実装済
 │   └── commands/
-│       └── test_markdown.py     # ✅ 実装済 (実装テスト)
+│       ├── test_markdown.py     # ✅ 実装済 (実装テスト)
+│       └── test_ir_fetch.py     # ✅ 実装済
 ├── core/
 │   ├── test_config.py           # ✅ 実装済
+│   ├── test_download_path.py    # ✅ 実装済
 │   └── test_exceptions.py       # ✅ 実装済
 ├── orchestrator/
 │   └── test_query_orchestrator.py  # ✅ 実装済
 ├── schemas/
-│   └── test_edinet_schemas.py   # ✅ 実装済
+│   ├── test_edinet_schemas.py   # ✅ 実装済
+│   └── test_ir_schemas.py       # ✅ 実装済
 ├── services/
-│   └── test_edinet_document_service.py  # ✅ 実装済
+│   ├── test_edinet_document_service.py  # ✅ 実装済
+│   └── test_ir_scraper_service.py  # ✅ 実装済
+├── tools/
+│   ├── test_download_document.py  # ✅ 実装済
+│   └── test_ir_tools.py         # ✅ 実装済
 ├── parsers/
 │   ├── test_xbrl_parser.py
 │   └── test_pdf_parser.py
@@ -799,6 +824,6 @@ coverage.xml
 ---
 
 **作成日**: 2026年1月16日
-**更新日**: 2026年1月18日
-**バージョン**: 1.1
-**ステータス**: ドラフト
+**更新日**: 2026年1月29日
+**バージョン**: 1.2
+**ステータス**: 実装完了（IR機能追加）

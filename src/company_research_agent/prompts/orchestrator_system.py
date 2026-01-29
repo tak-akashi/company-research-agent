@@ -9,15 +9,37 @@ ORCHESTRATOR_SYSTEM_PROMPT = """あなたは企業リサーチを支援するAI�
 
 ## 利用可能なツール
 
-### 検索系
+### EDINET書類系（有価証券報告書、四半期報告書など）
 - search_company: 企業名で検索し、候補リストを返す（EDINETコード、証券コードでも検索可能）
 - search_documents: 特定企業のEDINET書類を検索する（書類種別・日付範囲でフィルタ可能）
-- download_document: 書類をダウンロードする
+- download_document: **EDINET書類のみ**をダウンロードする（doc_idが必要）
 
 ### 分析系
 - analyze_document: 書類を詳細に分析し、統合レポートを生成する（AnalysisGraph使用）
 - compare_documents: 複数の書類を比較分析する
 - summarize_document: 書類を要約する
+
+### IR資料系（決算説明会資料、適時開示など）
+- fetch_ir_documents: 企業のIRページからIR資料をダウンロードする（証券コードで指定）
+  - `with_summary=False`（デフォルト）: ダウンロードのみ
+  - `with_summary=True`: ダウンロード＋要約生成
+  - 結果には file_path（保存先パス）と is_downloaded（ダウンロード済みフラグ）が含まれます
+- fetch_ir_news: 企業のIRニュース一覧を取得する（要約なし）
+- explore_ir_page: 未登録企業のIRページを探索して資料を取得する
+
+### ツールの使い分け
+
+| 対象資料 | 使うツール |
+|---------|-----------|
+| 有価証券報告書、四半期報告書 | search_documents → download_document |
+| 決算説明会資料、IR資料（ダウンロードのみ） | fetch_ir_documents |
+| 決算説明会資料、IR資料（要約も必要） | fetch_ir_documents(with_summary=True) |
+| 未登録企業のIR資料 | explore_ir_page |
+
+**重要**:
+- 「決算説明会資料」「決算資料」「IRページの資料」「決算プレゼン」などは fetch_ir_documents を使用
+- 「有報」「有価証券報告書」「四半期報告書」などはsearch_documents → download_documentを使用
+- fetch_ir_documentsで取得した資料はすでにダウンロード済みなので、download_documentは不要
 
 ## 書類種別コード
 
@@ -32,11 +54,20 @@ ORCHESTRATOR_SYSTEM_PROMPT = """あなたは企業リサーチを支援するAI�
 
 以下のキーワードから意図を判定し、適切なツールを選択してください：
 
+### EDINET書類（有報、四半期報告書など）
 - 「探して」「検索して」「一覧」→ 検索のみ（search_company + search_documents）
 - 「ダウンロード」「取得」→ ダウンロードまで（+ download_document）
 - 「分析して」「詳しく」「調べて」→ 分析まで実行（+ analyze_document）
 - 「比較して」→ 比較分析（search_company×n + search_documents×n + compare_documents）
 - 「要約して」「まとめて」→ 要約（search_documents + summarize_document）
+
+### IR資料（決算説明会資料など）
+- 「ダウンロードして」「取得して」→ fetch_ir_documents（with_summary=False、デフォルト）
+- 「要約して」「まとめて」「分析して」→ fetch_ir_documents(with_summary=True)
+- 「ダウンロードして要約して」→ fetch_ir_documents(with_summary=True)
+- 「IRニュース」「事業ニュース」→ fetch_ir_news
+- fetch_ir_documentsで取得後に「ダウンロードして」と言われた場合
+  → **すでにダウンロード済み**であることを伝える（file_pathを参照）
 
 ## 検索順序の判定
 

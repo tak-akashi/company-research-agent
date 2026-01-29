@@ -526,6 +526,17 @@ result.documents
 # )]
 ```
 
+**利用ツール**:
+- `search_company`: 企業検索
+- `search_documents`: 書類検索
+- `download_document`: 書類ダウンロード
+- `analyze_document`: 書類分析（AnalysisGraph wrapper）
+- `compare_documents`: 複数書類比較
+- `summarize_document`: 書類要約
+- `fetch_ir_documents`: IR資料取得
+- `fetch_ir_news`: IRニュース取得
+- `explore_ir_page`: IRページ探索
+
 **実装状態**: ✅ 実装完了 (`src/company_research_agent/orchestrator/query_orchestrator.py`, `src/company_research_agent/prompts/orchestrator_system.py`)
 
 ### LLMProvider（マルチLLMプロバイダー）
@@ -1843,7 +1854,83 @@ src/company_research_agent/
 
 ---
 
+### IRScraperService（IR資料取得サービス）
+
+**責務**:
+- 企業IRページからの資料取得
+- PDF自動ダウンロードと要約生成
+- テンプレートベース/LLM探索の切り替え
+
+**インターフェース**:
+```python
+class IRScraperService:
+    """IR資料の取得・ダウンロード・要約を統合管理"""
+
+    async def fetch_ir_documents(
+        self,
+        sec_code: str,
+        category: str = "earnings",  # earnings|news|disclosures
+        since: date | None = None,
+        force: bool = False,
+        with_summary: bool = True,
+    ) -> list[IRDocument]:
+        """IR資料を取得する
+
+        テンプレート優先 → LLMフォールバック戦略
+        """
+        ...
+
+    async def explore_ir_page(
+        self,
+        url: str,
+        since: date | None = None,
+        force: bool = False,
+        with_summary: bool = True,
+    ) -> list[IRDocument]:
+        """アドホックIRページ探索"""
+        ...
+
+    async def fetch_all_registered(
+        self,
+        category: str = "earnings",
+        since: date | None = None,
+        force: bool = False,
+    ) -> dict[str, list[IRDocument]]:
+        """全登録企業一括処理"""
+        ...
+```
+
+**出力スキーマ**:
+```python
+@dataclass
+class IRDocument:
+    """IR資料メタデータ"""
+    title: str                    # 資料タイトル
+    url: str                      # 元URL
+    published_date: date | None   # 公開日
+    category: str                 # カテゴリ
+    local_path: str | None        # ダウンロード済みパス
+    summary: IRSummary | None     # 要約（オプション）
+
+@dataclass
+class IRSummary:
+    """IR資料要約"""
+    summary: str                  # 要約文
+    key_points: list[str]         # 重要ポイント
+    impact_points: list[ImpactPoint]  # 株価影響ポイント
+```
+
+**依存関係**:
+- `BaseIRScraper`: Playwright Webスクレイピング基盤
+- `TemplateLoader`: YAMLテンプレート読み込み・実行
+- `LLMExplorer`: LLMベースIRページ探索
+- `LLMProvider`: 要約生成
+
+**実装状態**: ✅ 実装完了 (`src/company_research_agent/services/ir_scraper_service.py`)
+
+---
+
 **作成日**: 2026年1月16日
-**更新日**: 2026年1月18日
-**バージョン**: 1.5
-**ステータス**: 実装完了（ノード実行ログ、OrchestratorResultメタデータ追加）
+**更新日**: 2026年1月29日
+**バージョン**: 1.6
+**ステータス**: 実装完了（IR資料取得機能追加）

@@ -6,7 +6,7 @@
 
 | 技術 | バージョン | 選定理由 |
 |------|-----------|----------|
-| Python | 3.11+ | 型ヒント（PEP 604/612）の完全サポート、データ分析エコシステム、asyncioによる非同期処理 |
+| Python | 3.12+ | 型ヒント（PEP 604/612）の完全サポート、データ分析エコシステム、asyncioによる非同期処理 |
 | uv | 0.5+ | Rust製の高速パッケージマネージャ（pip比で10-100倍高速）、pyproject.tomlによる統一的な依存関係管理 |
 
 ### フレームワーク・ライブラリ
@@ -128,6 +128,11 @@
 │   ├─ EDINETDocumentService（書類検索）✅ 実装済          │
 │   ├─ EDINETClient（EDINET API連携）✅ 実装済            │
 │   ├─ EDINETCodeListClient（企業検索）✅ 実装済          │
+│   ├─ IRScraperService（IR資料取得）✅ 実装済            │
+│   │   ├─ BaseIRScraper（Playwright基盤）               │
+│   │   ├─ TemplateLoader（YAMLテンプレート）            │
+│   │   ├─ LLMExplorer（LLM IRページ探索）              │
+│   │   └─ IRTemplateGenerator（テンプレート自動生成）   │
 │   ├─ LLMProvider（マルチLLM抽象化）✅ 実装済            │
 │   │   ├─ OpenAI / Google / Anthropic / Ollama         │
 │   ├─ VisionLLMClient（PDF解析用ビジョンLLM）✅ 実装済   │
@@ -164,14 +169,22 @@
 - ダウンロード（download）: PDF/XBRL形式でダウンロード
 - PDF分析（analyze）: マークダウン変換・情報抽出
 - キャッシュ管理（cache）: ダウンロード済みファイルの管理
+- 自然言語クエリ（query）: LLMエージェントによる対話形式の分析
+- 対話モード（chat）: 会話履歴を保持したインタラクティブ分析
+- IR資料取得（ir-fetch）: 企業IRページから資料ダウンロード・要約
+- IRテンプレート（ir-template）: スクレイピングテンプレート管理
 
 ```bash
 # 使用例
-uv run cra search --name "トヨタ"
-uv run cra list --sec-code 72030 --doc-types 120,140
-uv run cra download --sec-code 72030 --limit 3
-uv run cra analyze --doc-id S100XXXX
-uv run cra cache --stats
+cra search --name "トヨタ"
+cra list --sec-code 72030 --doc-types 120,140
+cra download --sec-code 72030 --limit 3
+cra markdown --doc-id S100XXXX
+cra query "トヨタの有報を分析して"
+cra chat
+cra cache --stats
+cra ir-fetch --sec-code 72030 --category earnings --since 30
+cra ir-template create --sec-code 72030
 ```
 
 ```python
@@ -553,7 +566,12 @@ src/company_research_agent/
 ├── clients/
 │   ├── edinet_client.py         # EDINET API通信 ✅ 実装済
 │   ├── edinet_code_list_client.py  # 企業検索（rapidfuzz） ✅ 実装済
-│   └── vision_client.py         # VisionLLMClient（PDF解析用） ✅ 実装済
+│   ├── vision_client.py         # VisionLLMClient（PDF解析用） ✅ 実装済
+│   └── ir_scraper/              # IRスクレイピング ✅ 実装済
+│       ├── base.py              # BaseIRScraper（Playwright基盤）
+│       ├── template_loader.py   # TemplateLoader（YAML読み込み・実行）
+│       ├── template_generator.py # IRTemplateGenerator（LLM自動生成）
+│       └── llm_explorer.py      # LLMExplorer（LLMベース探索）
 ├── tools/                        # LangChainツール群 ✅ 実装済
 │   ├── __init__.py
 │   ├── search_company.py        # 企業検索ツール
@@ -561,13 +579,20 @@ src/company_research_agent/
 │   ├── download_document.py     # 書類ダウンロードツール
 │   ├── analyze_document.py      # 分析ツール（AnalysisGraph wrapper）
 │   ├── compare_documents.py     # 比較ツール（PDFParser + LLM）
-│   └── summarize_document.py    # 要約ツール（PDFParser + LLM）
+│   ├── summarize_document.py    # 要約ツール（PDFParser + LLM）
+│   └── ir_tools.py              # IRツール群 ✅ 実装済
+│       ├── fetch_ir_documents   # IR資料取得
+│       ├── fetch_ir_news        # IRニュース取得
+│       └── explore_ir_page      # IRページ探索
 ├── orchestrator/                 # 自然言語オーケストレーター ✅ 実装済
 │   ├── __init__.py
 │   └── query_orchestrator.py    # QueryOrchestrator（ReActエージェント）
-├── prompts/
-│   └── orchestrator_system.py   # オーケストレーターシステムプロンプト
-│                                 # - 意図判定、検索順序判定、期間解釈機能
+├── prompts/                      # プロンプトテンプレート
+│   ├── orchestrator_system.py   # オーケストレーターシステムプロンプト
+│   ├── summarize_document.py    # 書類要約プロンプト
+│   ├── compare_documents.py     # 書類比較プロンプト
+│   ├── ir_summary.py            # IR資料要約プロンプト ✅ 実装済
+│   └── ir_template.py           # IRテンプレート生成プロンプト ✅ 実装済
 ├── workflows/                    # LangGraphワークフロー
 │   ├── __init__.py
 │   ├── state.py                 # AnalysisState定義
@@ -583,13 +608,20 @@ src/company_research_agent/
 │       ├── period_comparison_node.py  # 前期比較
 │       └── aggregator_node.py   # 結果統合
 ├── schemas/
+│   ├── edinet_schemas.py        # EDINETスキーマ ✅ 実装済
+│   ├── document_filter.py       # 検索フィルタ ✅ 実装済
+│   ├── query_schemas.py         # クエリスキーマ ✅ 実装済
+│   ├── ir_schemas.py            # IRスキーマ ✅ 実装済
 │   └── llm_analysis.py          # 分析結果スキーマ
-└── prompts/                     # プロンプトテンプレート
-    ├── __init__.py
-    ├── business_summary.py
-    ├── risk_extraction.py
-    ├── financial_analysis.py
-    └── period_comparison.py
+├── services/                    # ビジネスロジック ✅ 実装済
+│   ├── edinet_document_service.py  # EDINET書類検索
+│   ├── local_cache_service.py      # ローカルキャッシュ
+│   └── ir_scraper_service.py       # IR資料取得・要約
+└── core/                        # 共通機能
+    ├── config.py                # アプリケーション設定
+    ├── exceptions.py            # カスタム例外
+    ├── types.py                 # 型エイリアス
+    └── download_path.py         # ダウンロードパス構築
 ```
 
 ### 依存関係
@@ -889,6 +921,6 @@ dev = [
 ---
 
 **作成日**: 2026年1月16日
-**更新日**: 2026年1月18日
-**バージョン**: 1.5
-**ステータス**: 実装完了（ノード実行ログ、メタデータ機能追加）
+**更新日**: 2026年1月29日
+**バージョン**: 1.6
+**ステータス**: 実装完了（IR資料取得機能追加）

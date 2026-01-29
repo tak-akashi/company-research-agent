@@ -66,7 +66,7 @@ class TestBuildDownloadPath:
     """Tests for build_download_path function."""
 
     def test_full_metadata(self) -> None:
-        """Full metadata should create complete path."""
+        """Full metadata should create complete path with /edinet/ subfolder."""
         path = build_download_path(
             base_dir=Path("downloads"),
             sec_code="72030",
@@ -76,7 +76,7 @@ class TestBuildDownloadPath:
             doc_id="S100ABCD",
         )
         assert path == Path(
-            "downloads/72030_トヨタ自動車株式会社/120_有価証券報告書/202503/S100ABCD.pdf"
+            "downloads/72030_トヨタ自動車株式会社/edinet/120_有価証券報告書/202503/S100ABCD.pdf"
         )
 
     def test_all_none_uses_unclassified_fallback(self) -> None:
@@ -89,7 +89,7 @@ class TestBuildDownloadPath:
             period_end=None,
             doc_id="S100EFGH",
         )
-        assert path == Path("downloads/_unclassified/S100EFGH.pdf")
+        assert path == Path("downloads/_unclassified/edinet/S100EFGH.pdf")
         assert path.name == "S100EFGH.pdf"
 
     def test_partial_metadata_uses_unknown(self) -> None:

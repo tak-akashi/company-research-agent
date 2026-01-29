@@ -31,7 +31,8 @@ Example:
 
 from __future__ import annotations
 
-from company_research_agent.llm.config import LLMConfig
+from company_research_agent.core.config import LLMConfig
+from company_research_agent.core.types import LLMProviderType
 from company_research_agent.llm.factory import (
     clear_provider_cache,
     create_llm_provider,
@@ -46,7 +47,6 @@ from company_research_agent.llm.providers import (
     OllamaProvider,
     OpenAIProvider,
 )
-from company_research_agent.llm.types import LLMProviderType
 
 __all__ = [
     # 設定

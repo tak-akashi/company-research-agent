@@ -82,8 +82,10 @@ class TestDownloadDocument:
     @pytest.mark.asyncio
     async def test_download_document_skips_if_path_exists(self, tmp_path: Path) -> None:
         """download_document should skip download if computed path already exists."""
-        # Create file at the computed hierarchical path
-        existing_path = tmp_path / "72030_トヨタ" / "120_有価証券報告書" / "202503" / "S100ABCD.pdf"
+        # Create file at the computed hierarchical path (with /edinet/ subfolder)
+        existing_path = (
+            tmp_path / "72030_トヨタ" / "edinet" / "120_有価証券報告書" / "202503" / "S100ABCD.pdf"
+        )
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.touch()
 

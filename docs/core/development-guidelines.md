@@ -225,7 +225,7 @@ def aggregate_financials(*statements: FinancialStatement) -> AggregatedData:
 **mypy設定 (pyproject.toml)**:
 ```toml
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true
@@ -998,7 +998,7 @@ financials = await repo.get_by_doc_ids(doc_ids)  # 1回クエリ
 
 | ツール | バージョン | インストール方法 |
 |--------|-----------|-----------------|
-| Python | 3.11+ | pyenv, asdf, または公式インストーラー |
+| Python | 3.12+ | pyenv, asdf, または公式インストーラー |
 | uv | 0.9+ | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Docker | 24+ | Docker Desktop |
 
@@ -1277,5 +1277,6 @@ jobs:
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月29日
+**バージョン**: 1.1
+**ステータス**: 実装完了

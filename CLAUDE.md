@@ -13,13 +13,17 @@ AI-powered Corporate Research Agent - 企業情報収集・分析エージェン
 
 | 分類 | 技術 |
 |------|------|
-| 言語 | Python 3.11+ |
+| 言語 | Python 3.12+ |
 | パッケージ管理 | uv 0.9+ |
 | Webフレームワーク | FastAPI |
 | ORM | SQLAlchemy 2.0+ (asyncpg) |
 | データベース | PostgreSQL 15+ + pgvector |
 | XBRL解析 | edinet-xbrl + BeautifulSoup/lxml |
 | PDF解析 | pdfplumber + pymupdf4llm + yomitoku |
+| Webスクレイピング | Playwright + BeautifulSoup4 |
+| LLMフレームワーク | LangChain + LangGraph |
+| LLMプロバイダー | OpenAI, Google Gemini, Anthropic, Ollama |
+| オブザーバビリティ | Langfuse |
 | 開発ツール | ruff, mypy, pytest, pre-commit |
 
 ## ディレクトリ構造
@@ -36,21 +40,35 @@ src/company_research_agent/
 │   │   ├── markdown.py   # PDF→マークダウン変換
 │   │   ├── query.py      # 自然言語クエリ
 │   │   ├── chat.py       # 対話モード
-│   │   └── cache.py      # キャッシュ管理
+│   │   ├── cache.py      # キャッシュ管理
+│   │   ├── ir_fetch.py   # IR資料取得
+│   │   └── ir_template.py # IRテンプレート管理
 │   ├── config.py  # CLI設定・定数
 │   ├── output.py  # 出力ユーティリティ
 │   └── rich_output.py  # Rich整形出力
-├── clients/       # 外部APIクライアント (EDINET, Gemini)
+├── clients/       # 外部APIクライアント
+│   ├── edinet_client.py        # EDINET API
+│   ├── edinet_code_list_client.py # 企業コードリスト
+│   ├── vision_client.py        # ビジョンLLM
+│   └── ir_scraper/             # IRスクレイピング
+│       ├── base.py             # 基盤クラス (Playwright)
+│       ├── template_loader.py  # YAMLテンプレート
+│       ├── template_generator.py # LLMテンプレート生成
+│       └── llm_explorer.py     # LLM IRページ探索
 ├── llm/           # LLMプロバイダー抽象化レイヤー
 ├── observability/ # オブザーバビリティ (Langfuse統合)
 ├── orchestrator/  # 自然言語オーケストレーター
 ├── parsers/       # XBRL/PDF解析
 ├── services/      # ビジネスロジック
+│   ├── edinet_document_service.py # EDINET書類検索
+│   ├── local_cache_service.py     # ローカルキャッシュ
+│   └── ir_scraper_service.py      # IR資料取得・要約
 ├── repositories/  # データアクセス
 ├── models/        # SQLAlchemyモデル
 ├── schemas/       # Pydanticスキーマ
 ├── tools/         # LangChainツール群
 ├── workflows/     # LangGraphワークフロー
+├── prompts/       # プロンプトテンプレート
 └── core/          # 設定、例外、ユーティリティ
 
 tests/
@@ -104,6 +122,11 @@ cra download --sec-code 72030 --limit 3
 cra markdown --doc-id S100VWVY
 cra query "トヨタの有報を分析して"
 cra chat
+
+# IR資料取得
+cra ir-fetch --sec-code 72030 --category earnings --since 30
+cra ir-fetch --url "https://example.com/ir" --force
+cra ir-template create --sec-code 72030
 
 # デバッグモード（-v または LOG_LEVEL で詳細ログ表示）
 cra -v list --sec-code 72030
@@ -176,7 +199,7 @@ docs(api): APIドキュメントを更新
 
 ## 参考ドキュメント
 
-詳細は `docs/` 配下を参照:
+詳細は `docs/core/` 配下を参照:
 
 - `product-requirements.md` - プロダクト要求定義書
 - `functional-design.md` - 機能設計書

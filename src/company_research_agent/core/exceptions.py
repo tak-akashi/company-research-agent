@@ -199,3 +199,96 @@ class CompanyNotFoundError(CompanyResearchAgentError):
         if self.query:
             return f"Company Not Found for query '{self.query}': {self.message}"
         return f"Company Not Found: {self.message}"
+
+
+# =============================================================================
+# IR Scraper Errors
+# =============================================================================
+
+
+@dataclass
+class IRScraperError(CompanyResearchAgentError):
+    """Base exception for IR scraping errors.
+
+    Attributes:
+        message: Error message describing the issue.
+    """
+
+    message: str
+
+    def __str__(self) -> str:
+        return f"IR Scraper Error: {self.message}"
+
+
+@dataclass
+class IRTemplateNotFoundError(IRScraperError):
+    """Raised when IR template is not found for a company.
+
+    Attributes:
+        message: Error message describing the issue.
+        sec_code: The securities code that was searched.
+    """
+
+    sec_code: str | None = None
+
+    def __str__(self) -> str:
+        if self.sec_code:
+            return f"IR Template Not Found for sec_code '{self.sec_code}': {self.message}"
+        return f"IR Template Not Found: {self.message}"
+
+
+@dataclass
+class IRPageAccessError(IRScraperError):
+    """Raised when access to IR page fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        url: The URL that was being accessed.
+        status_code: HTTP status code if available.
+    """
+
+    url: str | None = None
+    status_code: int | None = None
+
+    def __str__(self) -> str:
+        parts = ["IR Page Access Error"]
+        if self.status_code:
+            parts.append(f"[{self.status_code}]")
+        if self.url:
+            parts.append(f"at {self.url}")
+        parts.append(f": {self.message}")
+        return " ".join(parts)
+
+
+@dataclass
+class IRDocumentDownloadError(IRScraperError):
+    """Raised when IR document download fails.
+
+    Attributes:
+        message: Error message describing the issue.
+        url: The URL of the document that failed to download.
+    """
+
+    url: str | None = None
+
+    def __str__(self) -> str:
+        if self.url:
+            return f"IR Document Download Error for {self.url}: {self.message}"
+        return f"IR Document Download Error: {self.message}"
+
+
+@dataclass
+class IRRobotsTxtError(IRScraperError):
+    """Raised when robots.txt check fails or disallows access.
+
+    Attributes:
+        message: Error message describing the issue.
+        url: The URL that was checked.
+    """
+
+    url: str | None = None
+
+    def __str__(self) -> str:
+        if self.url:
+            return f"IR Robots.txt Error for {self.url}: {self.message}"
+        return f"IR Robots.txt Error: {self.message}"

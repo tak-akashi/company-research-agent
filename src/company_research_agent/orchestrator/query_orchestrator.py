@@ -27,6 +27,11 @@ from company_research_agent.tools import (
     search_documents,
     summarize_document,
 )
+from company_research_agent.tools.ir_tools import (
+    explore_ir_page,
+    fetch_ir_documents,
+    fetch_ir_news,
+)
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -77,6 +82,9 @@ class QueryOrchestrator:
             analyze_document,
             compare_documents,
             summarize_document,
+            fetch_ir_documents,
+            fetch_ir_news,
+            explore_ir_page,
         ]
 
     def _build_agent(self) -> CompiledStateGraph[Any]:
@@ -263,6 +271,10 @@ class QueryOrchestrator:
             return "要約"
         if "download_document" in tools_used:
             return "取得"
+        if "fetch_ir_documents" in tools_used or "explore_ir_page" in tools_used:
+            return "IR資料取得"
+        if "fetch_ir_news" in tools_used:
+            return "IRニュース取得"
         if "search_documents" in tools_used or "search_company" in tools_used:
             return "検索"
         return "その他"

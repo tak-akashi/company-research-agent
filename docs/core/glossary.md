@@ -4,7 +4,7 @@
 
 このドキュメントは、Company Research Agentプロジェクト内で使用される用語の定義を管理します。
 
-**更新日**: 2026-01-16
+**更新日**: 2026-01-29
 
 ---
 
@@ -42,6 +42,49 @@
 **公式サイト**: https://www.release.tdnet.info/
 
 **英語表記**: Timely Disclosure network
+
+### IRスクレイピング
+
+**定義**: 企業の公式IRページからPDF資料やニュースを自動的に取得する機能。
+
+**説明**: 企業ごとにIRページの構造が異なるため、テンプレートベースのスクレイピングとLLMによる動的探索の2つの方式をサポートします。
+
+**関連用語**: [IRテンプレート](#irテンプレート), [BaseIRScraper](#baseirscraper)
+
+**使用例**:
+- 「トヨタのIRページから決算説明会資料をスクレイピングする」
+- 「LLMで未知のIRページ構造を探索する」
+
+**実装箇所**: `src/company_research_agent/clients/ir_scraper/`
+
+### IRテンプレート
+
+**定義**: 企業IRページのスクレイピング設定を定義したYAMLファイル。
+
+**説明**: セレクターベースでIR資料のURLや日付を抽出する再利用可能な設定。企業ごとにカスタマイズ可能。
+
+**関連用語**: [IRスクレイピング](#irスクレイピング), [TemplateLoader](#templateloader)
+
+**使用例**:
+- 「cra ir-template create --sec-code 72030」
+- 「テンプレートを検証して有効性を確認する」
+
+**保存場所**: `config/ir_templates/`
+
+**フォーマット例**:
+```yaml
+sec_code: "72030"
+company_name: "トヨタ自動車"
+ir_url: "https://global.toyota/jp/ir/"
+sections:
+  earnings:
+    name: "決算情報"
+    selectors:
+      items: ".ir-list-item"
+      title: ".title"
+      url: "a[href]"
+      date: ".date"
+```
 
 ### EDINETコード
 
@@ -339,9 +382,9 @@ ROA = 当期純利益 / 総資産 × 100 (%)
 
 **公式サイト**: https://www.python.org/
 
-**本プロジェクトでの用途**: 全てのソースコードをPython 3.11+で記述し、型ヒントで型安全性を確保しています。
+**本プロジェクトでの用途**: 全てのソースコードをPython 3.12+で記述し、型ヒントで型安全性を確保しています。
 
-**バージョン**: 3.11+
+**バージョン**: 3.12+
 
 **選定理由**:
 - 型ヒント（PEP 604/612）による静的型チェック
@@ -615,6 +658,124 @@ type ParseStrategy = Literal["auto", "pdfplumber", "pymupdf4llm", "yomitoku", "g
 **本プロジェクトでの用途**: 簡易Web UIの構築（プロトタイプ）。
 
 **バージョン**: 1.40+
+
+### Playwright
+
+**定義**: Microsoftが開発したブラウザ自動化ライブラリ。
+
+**公式サイト**: https://playwright.dev/python/
+
+**本プロジェクトでの用途**: IRスクレイピングにおける動的ページ対応、JavaScript実行。
+
+**選定理由**:
+- Chromium/Firefox/WebKitをサポート
+- 非同期API対応
+- ヘッドレス/ヘッドフル切り替え可能
+
+**関連用語**: [IRスクレイピング](#irスクレイピング), [BaseIRScraper](#baseirscraper)
+
+### BaseIRScraper
+
+**定義**: Playwrightを使用したWebスクレイピングの基盤クラス。
+
+**本プロジェクトでの用途**: IRページのHTML取得、PDFダウンロードを担当。
+
+**実装場所**: `src/company_research_agent/clients/ir_scraper/base.py`
+
+**主な機能**:
+- `fetch_page(url)`: HTMLコンテンツ取得
+- `download_pdf(url, save_path, force)`: PDFファイルダウンロード
+
+**関連用語**: [Playwright](#playwright), [IRスクレイピング](#irスクレイピング)
+
+### TemplateLoader
+
+**定義**: YAMLテンプレートを読み込み、スクレイピングを実行するクラス。
+
+**本プロジェクトでの用途**: 定義済みテンプレートに基づいてIR資料を抽出。
+
+**実装場所**: `src/company_research_agent/clients/ir_scraper/template_loader.py`
+
+**関連用語**: [IRテンプレート](#irテンプレート)
+
+### LLMExplorer
+
+**定義**: LLMを使用してIRページを動的に探索するクラス。
+
+**本プロジェクトでの用途**: テンプレートが存在しない企業のIRページを自動探索。
+
+**実装場所**: `src/company_research_agent/clients/ir_scraper/llm_explorer.py`
+
+**特徴**:
+- ページHTMLをLLMに渡して資料リンクを抽出
+- カテゴリ（決算/ニュース/適時開示）を自動分類
+
+**関連用語**: [IRスクレイピング](#irスクレイピング)
+
+### IRScraperService
+
+**定義**: IR資料の取得・ダウンロード・要約を統合管理するサービスクラス。
+
+**本プロジェクトでの用途**: CLIコマンドとツールから呼び出されるビジネスロジック層。
+
+**実装場所**: `src/company_research_agent/services/ir_scraper_service.py`
+
+**主な機能**:
+- `fetch_ir_documents()`: 企業のIR資料を取得
+- `explore_ir_page()`: アドホックIRページ探索
+- `fetch_all_registered()`: 全登録企業一括処理
+
+**戦略**:
+1. テンプレートが存在する場合はTemplateLoaderを使用
+2. テンプレートがない場合はLLMExplorerにフォールバック
+
+**関連用語**: [TemplateLoader](#templateloader), [LLMExplorer](#llmexplorer)
+
+### IRDocument
+
+**定義**: IR資料のメタデータを格納するデータクラス。
+
+**本プロジェクトでの用途**: 取得したIR資料の情報（タイトル、URL、カテゴリ、公開日、ダウンロードパス、要約結果）を管理。
+
+**実装場所**: `src/company_research_agent/schemas/ir_schemas.py`
+
+**主要フィールド**:
+- `title`: 資料タイトル
+- `url`: 資料のURL
+- `category`: カテゴリ（earnings/news/disclosures）
+- `published_date`: 公開日
+- `file_path`: ダウンロード後のローカルパス
+- `summary`: LLMによる要約結果（[IRSummary](#irsummary)）
+
+**関連用語**: [IRSummary](#irsummary), [IRスクレイピング](#irスクレイピング)
+
+### IRSummary
+
+**定義**: IR資料のLLM要約結果を格納するデータクラス。
+
+**本プロジェクトでの用途**: LLMによる要約処理の結果を構造化して保持。
+
+**実装場所**: `src/company_research_agent/schemas/ir_schemas.py`
+
+**主要フィールド**:
+- `overview`: 全体要約（100-200文字）
+- `impact_points`: 株価影響ポイントのリスト（[ImpactPoint](#impactpoint)）
+
+**関連用語**: [IRDocument](#irdocument), [ImpactPoint](#impactpoint)
+
+### ImpactPoint
+
+**定義**: IR資料から抽出された株価影響ポイントを表すデータクラス。
+
+**本プロジェクトでの用途**: 決算資料等から株価に影響を与える可能性のある情報を構造化。
+
+**実装場所**: `src/company_research_agent/schemas/ir_schemas.py`
+
+**主要フィールド**:
+- `label`: 影響の方向性（bullish=上昇要因, bearish=下落要因, warning=注意事項）
+- `content`: 影響ポイントの内容
+
+**関連用語**: [IRSummary](#irsummary)
 
 ### ruff
 
@@ -1149,6 +1310,9 @@ raise YomitokuError(
 - [GeminiAPIError](#geminiapieerror)
 - [GeminiClient](#geminiclient)
 - [httpx](#httpx)
+- [ImpactPoint](#impactpoint)
+- [IRDocument](#irdocument)
+- [IRSummary](#irsummary)
 - [mypy](#mypy)
 - [ORM](#orm)
 - [ParseStrategy](#parsestrategy)
@@ -1179,5 +1343,6 @@ raise YomitokuError(
 ---
 
 **作成日**: 2026年1月16日
-**バージョン**: 1.0
-**ステータス**: ドラフト
+**更新日**: 2026年1月29日
+**バージョン**: 1.1
+**ステータス**: 実装完了（IR用語追加）
