@@ -15,7 +15,7 @@ def gemini_config() -> GeminiConfig:
     """Provide a test Gemini configuration."""
     # Use MagicMock to avoid validation requiring actual API key
     config = MagicMock(spec=GeminiConfig)
-    config.api_key = "test-api-key"
+    config.google_api_key = "test-api-key"
     config.model = "gemini-2.5-flash-preview-05-20"
     config.timeout = 120
     config.max_retries = 3
